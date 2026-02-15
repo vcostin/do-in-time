@@ -39,6 +39,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
     name: '',
     browser: BrowserType.Chrome,
     url: '',
+    allowCloseAll: false,
     browserProfile: '',
     startTime: '',
     closeTime: '',
@@ -82,6 +83,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         name: initialTask.name,
         browser: initialTask.browser,
         url: initialTask.url || '',
+        allowCloseAll: initialTask.allow_close_all || false,
         browserProfile: initialTask.browser_profile || '',
         startTime: initialTask.start_time ? utcToLocalDatetimeString(initialTask.start_time) : '',
         closeTime: initialTask.close_time ? utcToLocalDatetimeString(initialTask.close_time) : '',
@@ -131,6 +133,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         name: formData.name,
         browser: formData.browser,
         url: formData.url || null,
+        allow_close_all: formData.allowCloseAll,
         browser_profile: formData.browserProfile || null,
         start_time: localDatetimeStringToUtc(formData.startTime),
         close_time: formData.closeTime ? localDatetimeStringToUtc(formData.closeTime) : null,
@@ -278,6 +281,21 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           onChange={(e) => setFormData({ ...formData, closeTime: e.target.value })}
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
         />
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={formData.allowCloseAll}
+            onChange={(e) => setFormData({ ...formData, allowCloseAll: e.target.checked })}
+            className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+          />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Allow close all browser instances (dangerous)
+          </span>
+          <InfoTooltip text="When enabled, a Close action with no URL will terminate all instances of the selected browser. Leave this disabled unless you explicitly need that behavior." />
+        </label>
       </div>
 
       <div>

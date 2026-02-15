@@ -1,7 +1,7 @@
 use sqlx::{sqlite::SqlitePool, Row};
 use crate::error::Result;
 
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 pub async fn initialize_schema(pool: &SqlitePool) -> Result<()> {
     // Create schema_version table
@@ -23,8 +23,12 @@ pub async fn initialize_schema(pool: &SqlitePool) -> Result<()> {
         .map(|row| row.get("version"))
         .unwrap_or(0);
 
-    if current_version < SCHEMA_VERSION {
+    if current_version == 0 {
         create_schema(pool).await?;
+    }
+
+    if current_version < 2 {
+        migrate_to_v2(pool).await?;
     }
 
     Ok(())
@@ -40,6 +44,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             browser TEXT NOT NULL,
             browser_profile TEXT,
             url TEXT,
+            allow_close_all INTEGER NOT NULL DEFAULT 0,
             start_time TEXT NOT NULL,
             close_time TEXT,
             timezone TEXT NOT NULL,
@@ -119,6 +124,23 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // Mark schema as initialized
     sqlx::query("INSERT OR REPLACE INTO schema_version (version) VALUES (?)")
         .bind(SCHEMA_VERSION)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+async fn migrate_to_v2(pool: &SqlitePool) -> Result<()> {
+    // Add explicit permission flag for dangerous close-all behavior.
+    let _ = sqlx::query(
+        r#"
+        ALTER TABLE tasks ADD COLUMN allow_close_all INTEGER NOT NULL DEFAULT 0
+        "#,
+    )
+    .execute(pool)
+    .await;
+
+    sqlx::query("INSERT OR REPLACE INTO schema_version (version) VALUES (2)")
         .execute(pool)
         .await?;
 

@@ -8,6 +8,8 @@ pub struct Task {
     pub browser: BrowserType,
     pub browser_profile: Option<String>,
     pub url: Option<String>,
+    #[serde(default)]
+    pub allow_close_all: bool,
     pub start_time: DateTime<Utc>,      // When to open browser
     pub close_time: Option<DateTime<Utc>>, // Optional: when to close browser
     pub timezone: String,
@@ -222,6 +224,7 @@ impl Task {
             browser,
             browser_profile: None,
             url: None,
+            allow_close_all: false,
             start_time,
             close_time: None,
             timezone,

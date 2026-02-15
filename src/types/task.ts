@@ -38,6 +38,7 @@ export interface Task {
   browser: BrowserType;
   browser_profile?: string | null;
   url?: string | null;
+  allow_close_all: boolean;
   start_time: string;  // When to open browser
   close_time?: string | null;  // Optional: when to close browser
   timezone: string;

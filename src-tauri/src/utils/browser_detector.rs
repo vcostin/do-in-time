@@ -2,6 +2,17 @@ use crate::db::BrowserType;
 use std::process::Command;
 
 #[cfg(target_os = "windows")]
+fn system32_exe(exe_name: &str) -> std::path::PathBuf {
+    let windows_dir = std::env::var_os("SystemRoot")
+        .or_else(|| std::env::var_os("WINDIR"))
+        .unwrap_or_else(|| "C:\\Windows".into());
+
+    std::path::PathBuf::from(windows_dir)
+        .join("System32")
+        .join(exe_name)
+}
+
+#[cfg(target_os = "windows")]
 pub fn get_installed_browsers() -> Vec<BrowserType> {
     let mut browsers = Vec::new();
 
@@ -50,7 +61,7 @@ fn check_registry_browsers() -> Vec<BrowserType> {
     let mut browsers = Vec::new();
 
     // Query registry for StartMenuInternet entries
-    let output = Command::new("reg")
+    let output = Command::new(system32_exe("reg.exe"))
         .args(&[
             "query",
             "HKLM\\SOFTWARE\\Clients\\StartMenuInternet",
@@ -119,7 +130,7 @@ fn check_opera_installed() -> bool {
 #[cfg(target_os = "windows")]
 fn check_app_path(exe_name: &str) -> bool {
     // Check registry App Paths for custom installations
-    let output = Command::new("reg")
+    let output = Command::new(system32_exe("reg.exe"))
         .args(&[
             "query",
             &format!("HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{}", exe_name),
@@ -144,7 +155,7 @@ fn check_app_path(exe_name: &str) -> bool {
 #[cfg(target_os = "windows")]
 pub fn get_default_browser() -> Option<BrowserType> {
     // Try to read default browser from registry
-    let output = Command::new("reg")
+    let output = Command::new(system32_exe("reg.exe"))
         .args(&[
             "query",
             "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice",

@@ -35,17 +35,18 @@ impl Database {
         let result = sqlx::query(
             r#"
             INSERT INTO tasks (
-                name, browser, browser_profile, url, start_time, close_time, timezone,
+                name, browser, browser_profile, url, allow_close_all, start_time, close_time, timezone,
                 repeat_interval, repeat_end_after, repeat_end_date, status,
                 created_at, updated_at, last_open_execution, last_close_execution,
                 next_open_execution, next_close_execution
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&task.name)
         .bind(task.browser.to_string())
         .bind(&task.browser_profile)
         .bind(&task.url)
+        .bind(task.allow_close_all)
         .bind(task.start_time.to_rfc3339())
         .bind(task.close_time.map(|d| d.to_rfc3339()))
         .bind(&task.timezone)
@@ -180,7 +181,7 @@ impl Database {
         sqlx::query(
             r#"
             UPDATE tasks SET
-                name = ?, browser = ?, browser_profile = ?, url = ?,
+                name = ?, browser = ?, browser_profile = ?, url = ?, allow_close_all = ?,
                 start_time = ?, close_time = ?, timezone = ?,
                 repeat_interval = ?, repeat_end_after = ?, repeat_end_date = ?,
                 status = ?, updated_at = ?,
@@ -193,6 +194,7 @@ impl Database {
         .bind(task.browser.to_string())
         .bind(&task.browser_profile)
         .bind(&task.url)
+        .bind(task.allow_close_all)
         .bind(task.start_time.to_rfc3339())
         .bind(task.close_time.map(|d| d.to_rfc3339()))
         .bind(&task.timezone)
@@ -285,6 +287,7 @@ impl Database {
             browser: BrowserType::from_str(&row.get::<String, _>("browser")).map_err(|e| AppError::InvalidTask(e))?,
             browser_profile: row.get("browser_profile"),
             url: row.get("url"),
+            allow_close_all: row.get("allow_close_all"),
             start_time: row.get::<String, _>("start_time").parse().map_err(|e| AppError::TimeParse(format!("{}", e)))?,
             close_time: row.get::<Option<String>, _>("close_time").and_then(|s| s.parse().ok()),
             timezone: row.get("timezone"),

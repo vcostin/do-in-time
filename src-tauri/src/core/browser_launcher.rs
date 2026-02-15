@@ -57,7 +57,7 @@ impl BrowserLauncher {
         #[cfg(target_os = "macos")]
         {
             // On macOS, use open command but can't easily track PID
-            let mut cmd = Command::new("open");
+            let mut cmd = Command::new("/usr/bin/open");
             cmd.arg("-a").arg(command);
 
             if !args.is_empty() {
@@ -147,7 +147,7 @@ impl BrowserLauncher {
                 app_name, escaped_url
             );
 
-            let output = Command::new("osascript")
+            let output = Command::new("/usr/bin/osascript")
                 .arg("-e")
                 .arg(&script)
                 .output()
@@ -175,7 +175,7 @@ impl BrowserLauncher {
 
         #[cfg(target_os = "windows")]
         {
-            Command::new("taskkill")
+            Command::new(Self::windows_system32_exe("taskkill.exe"))
                 .arg("/F")
                 .arg("/IM")
                 .arg(&process_name)
@@ -185,7 +185,7 @@ impl BrowserLauncher {
 
         #[cfg(target_os = "macos")]
         {
-            Command::new("pkill")
+            Command::new("/usr/bin/pkill")
                 .arg("-x")
                 .arg(&process_name)
                 .spawn()
@@ -223,11 +223,11 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "windows")]
                 {
-                    self.find_browser_path(&[
+                    self.find_browser_path_windows("chrome.exe", &[
                         "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
                         "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
                     ])
-                    .unwrap_or_else(|| "chrome.exe".to_string())
+                    .ok_or_else(|| AppError::BrowserNotFound("Google Chrome executable not found".to_string()))?
                 }
 
                 #[cfg(target_os = "macos")]
@@ -254,11 +254,11 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "windows")]
                 {
-                    self.find_browser_path(&[
+                    self.find_browser_path_windows("firefox.exe", &[
                         "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
                         "C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe",
                     ])
-                    .unwrap_or_else(|| "firefox.exe".to_string())
+                    .ok_or_else(|| AppError::BrowserNotFound("Mozilla Firefox executable not found".to_string()))?
                 }
 
                 #[cfg(target_os = "macos")]
@@ -282,11 +282,11 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "windows")]
                 {
-                    self.find_browser_path(&[
+                    self.find_browser_path_windows("msedge.exe", &[
                         "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
                         "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
                     ])
-                    .unwrap_or_else(|| "msedge.exe".to_string())
+                    .ok_or_else(|| AppError::BrowserNotFound("Microsoft Edge executable not found".to_string()))?
                 }
 
                 #[cfg(target_os = "macos")]
@@ -323,11 +323,11 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "windows")]
                 {
-                    self.find_browser_path(&[
+                    self.find_browser_path_windows("brave.exe", &[
                         "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
                         "C:\\Program Files (x86)\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
                     ])
-                    .unwrap_or_else(|| "brave.exe".to_string())
+                    .ok_or_else(|| AppError::BrowserNotFound("Brave executable not found".to_string()))?
                 }
 
                 #[cfg(target_os = "macos")]
@@ -347,11 +347,11 @@ impl BrowserLauncher {
             BrowserType::Opera => {
                 #[cfg(target_os = "windows")]
                 {
-                    self.find_browser_path(&[
+                    self.find_browser_path_windows("launcher.exe", &[
                         "C:\\Program Files\\Opera\\launcher.exe",
                         "C:\\Program Files (x86)\\Opera\\launcher.exe",
                     ])
-                    .unwrap_or_else(|| "opera.exe".to_string())
+                    .ok_or_else(|| AppError::BrowserNotFound("Opera executable not found".to_string()))?
                 }
 
                 #[cfg(target_os = "macos")]
@@ -451,7 +451,84 @@ impl BrowserLauncher {
         }
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn find_browser_path(&self, paths: &[&str]) -> Option<String> {
+        for path in paths {
+            if std::path::Path::new(path).exists() {
+                return Some(path.to_string());
+            }
+        }
+        None
+    }
+
+    #[cfg(target_os = "windows")]
+    fn find_browser_path_windows(&self, exe_name: &str, paths: &[&str]) -> Option<String> {
+        // Prefer absolute paths from the Windows registry App Paths key.
+        // This avoids relying on the process search order (PATH / current directory).
+        self.query_windows_app_path(exe_name)
+            .or_else(|| {
+                for path in paths {
+                    if std::path::Path::new(path).exists() {
+                        return Some(path.to_string());
+                    }
+                }
+                None
+            })
+    }
+
+    #[cfg(target_os = "windows")]
+    fn query_windows_app_path(&self, exe_name: &str) -> Option<String> {
+        // Try HKLM first, then HKCU.
+        for hive in ["HKLM", "HKCU"] {
+            let key = format!(
+                "{}\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{}",
+                hive, exe_name
+            );
+            let output = Command::new(Self::windows_system32_exe("reg.exe"))
+                .args(["query", &key, "/ve"])
+                .output()
+                .ok()?;
+
+            if !output.status.success() {
+                continue;
+            }
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                // Typical format:
+                // (Default)    REG_SZ    C:\Program Files\...\chrome.exe
+                if line.contains("REG_SZ") || line.contains("REG_EXPAND_SZ") {
+                    let value = if let Some(idx) = line.find("REG_EXPAND_SZ") {
+                        &line[idx + "REG_EXPAND_SZ".len()..]
+                    } else if let Some(idx) = line.find("REG_SZ") {
+                        &line[idx + "REG_SZ".len()..]
+                    } else {
+                        continue;
+                    };
+                    let path = value.trim().trim_matches('"');
+                    if !path.is_empty() && std::path::Path::new(path).exists() {
+                        return Some(path.to_string());
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    #[cfg(target_os = "windows")]
+    fn windows_system32_exe(exe_name: &str) -> std::path::PathBuf {
+        let windows_dir = std::env::var_os("SystemRoot")
+            .or_else(|| std::env::var_os("WINDIR"))
+            .unwrap_or_else(|| "C:\\Windows".into());
+
+        std::path::PathBuf::from(windows_dir)
+            .join("System32")
+            .join(exe_name)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn find_browser_path_windows(&self, _exe_name: &str, paths: &[&str]) -> Option<String> {
         for path in paths {
             if std::path::Path::new(path).exists() {
                 return Some(path.to_string());

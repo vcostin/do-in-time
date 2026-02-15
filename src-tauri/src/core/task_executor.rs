@@ -4,6 +4,7 @@ use chrono_tz::Tz;
 use crate::core::browser_launcher::BrowserLauncher;
 use crate::db::{Database, ExecutionAction, ExecutionStatus, RepeatInterval, Task, TaskStatus};
 use crate::error::Result;
+use crate::utils::validation::{validate_browser_profile, validate_url};
 use tauri::{AppHandle, Emitter};
 
 pub struct TaskExecutor {
@@ -23,6 +24,14 @@ impl TaskExecutor {
 
     pub async fn execute(&self, mut task: Task, action: ExecutionAction) -> Result<()> {
         let task_id = task.id.expect("Task must have an ID");
+
+        // Defense-in-depth: validate inputs again right before any system interaction.
+        if let Some(ref url) = task.url {
+            validate_url(url)?;
+        }
+        if let Some(ref profile) = task.browser_profile {
+            validate_browser_profile(profile)?;
+        }
 
         // Execute the browser action
         let result = match action {
@@ -45,10 +54,17 @@ impl TaskExecutor {
                         .close_browser_by_url(&task.browser, url)
                         .await
                 } else {
-                    // No URL specified, close all browser instances
-                    self.browser_launcher
-                        .close_browser(&task.browser)
-                        .await
+                    if task.allow_close_all {
+                        // Explicitly allowed: close all browser instances
+                        self.browser_launcher
+                            .close_browser(&task.browser)
+                            .await
+                    } else {
+                        Err(crate::error::AppError::InvalidTask(
+                            "Close without URL is blocked unless 'allow_close_all' is enabled for this task"
+                                .to_string(),
+                        ))
+                    }
                 }
             }
         };
