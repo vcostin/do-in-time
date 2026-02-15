@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Task } from '../types/task';
 import { TauriTaskService } from '../services/tauri-api';
 
+const REFRESH_INTERVAL_MS = 5000; // Refresh every 5 seconds
+
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,9 +54,25 @@ export function useTasks() {
     }
   }, []);
 
+  // Initial load
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+
+  // Poll for updates every 5 seconds to keep UI in sync with task execution
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const data = await TauriTaskService.getAllTasks();
+        setTasks(data);
+      } catch (err) {
+        // Silently fail on refresh errors to avoid spamming errors
+        console.error('Failed to refresh tasks:', err);
+      }
+    }, REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return {
     tasks,
