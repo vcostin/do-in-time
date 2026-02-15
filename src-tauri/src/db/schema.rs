@@ -145,6 +145,11 @@ async fn apply_migrations(pool: &SqlitePool, from_version: i32) -> Result<()> {
     // Migration 4: Remove window_pid column (no longer needed for URL-based closing)
     if from_version >= 3 && from_version < 4 {
         // SQLite doesn't support DROP COLUMN directly, so we need to recreate the table
+        // Step 0: Drop tasks_new if it exists from a failed migration
+        sqlx::query("DROP TABLE IF EXISTS tasks_new")
+            .execute(pool)
+            .await?;
+
         // Step 1: Create new table without window_pid
         sqlx::query(
             r#"
