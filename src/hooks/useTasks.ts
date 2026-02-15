@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Task } from '../types/task';
 import { TauriTaskService } from '../services/tauri-api';
-
-const REFRESH_INTERVAL_MS = 5000; // Refresh every 5 seconds
+import { listen } from '@tauri-apps/api/event';
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -59,20 +58,17 @@ export function useTasks() {
     loadTasks();
   }, [loadTasks]);
 
-  // Poll for updates every 5 seconds to keep UI in sync with task execution
+  // Listen for task-updated events from backend
   useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const data = await TauriTaskService.getAllTasks();
-        setTasks(data);
-      } catch (err) {
-        // Silently fail on refresh errors to avoid spamming errors
-        console.error('Failed to refresh tasks:', err);
-      }
-    }, REFRESH_INTERVAL_MS);
+    const unlisten = listen<number>('task-updated', () => {
+      // Refresh all tasks when any task is updated by the scheduler
+      loadTasks();
+    });
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, [loadTasks]);
 
   return {
     tasks,

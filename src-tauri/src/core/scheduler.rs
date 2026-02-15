@@ -5,6 +5,7 @@ use crate::core::task_executor::TaskExecutor;
 use crate::db::Database;
 use crate::error::{AppError, Result};
 use chrono::Utc;
+use tauri::AppHandle;
 
 pub struct TaskScheduler {
     db: Arc<Database>,
@@ -13,8 +14,8 @@ pub struct TaskScheduler {
 }
 
 impl TaskScheduler {
-    pub fn new(db: Arc<Database>) -> Self {
-        let executor = Arc::new(TaskExecutor::new(Arc::clone(&db)));
+    pub fn new(db: Arc<Database>, app_handle: AppHandle) -> Self {
+        let executor = Arc::new(TaskExecutor::new(Arc::clone(&db), app_handle));
         Self {
             db,
             executor,

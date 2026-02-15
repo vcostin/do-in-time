@@ -4,17 +4,20 @@ use chrono_tz::Tz;
 use crate::core::browser_launcher::BrowserLauncher;
 use crate::db::{Database, ExecutionAction, ExecutionStatus, RepeatInterval, Task, TaskStatus};
 use crate::error::Result;
+use tauri::{AppHandle, Emitter};
 
 pub struct TaskExecutor {
     browser_launcher: BrowserLauncher,
     db: Arc<Database>,
+    app_handle: AppHandle,
 }
 
 impl TaskExecutor {
-    pub fn new(db: Arc<Database>) -> Self {
+    pub fn new(db: Arc<Database>, app_handle: AppHandle) -> Self {
         Self {
             browser_launcher: BrowserLauncher::new(),
             db,
+            app_handle,
         }
     }
 
@@ -117,6 +120,9 @@ impl TaskExecutor {
                 // Update task in database
                 self.db.update_task(task_id, task).await?;
 
+                // Emit event to notify frontend of task status change
+                let _ = self.app_handle.emit("task-updated", task_id);
+
                 Ok(())
             }
             Err(e) => {
@@ -129,6 +135,9 @@ impl TaskExecutor {
                 // Update task status to failed
                 task.status = TaskStatus::Failed;
                 self.db.update_task(task_id, task).await?;
+
+                // Emit event to notify frontend of task status change
+                let _ = self.app_handle.emit("task-updated", task_id);
 
                 Err(e)
             }
