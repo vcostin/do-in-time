@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Task, BrowserType, TaskStatus, RepeatInterval } from '../types/task';
+import { utcToLocalDatetimeString, localDatetimeStringToUtc } from '../utils/datetime';
 
 interface TaskFormProps {
   initialTask: Task | null;
@@ -80,13 +81,13 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         browser: initialTask.browser,
         url: initialTask.url || '',
         browserProfile: initialTask.browser_profile || '',
-        startTime: initialTask.start_time ? new Date(initialTask.start_time).toISOString().slice(0, 16) : '',
-        closeTime: initialTask.close_time ? new Date(initialTask.close_time).toISOString().slice(0, 16) : '',
+        startTime: initialTask.start_time ? utcToLocalDatetimeString(initialTask.start_time) : '',
+        closeTime: initialTask.close_time ? utcToLocalDatetimeString(initialTask.close_time) : '',
         timezone: initialTask.timezone,
         repeatEnabled: !!initialTask.repeat_config,
         repeatInterval: initialTask.repeat_config?.interval || RepeatInterval.Daily,
         repeatEndAfter: initialTask.repeat_config?.end_after?.toString() || '',
-        repeatEndDate: initialTask.repeat_config?.end_date ? new Date(initialTask.repeat_config.end_date).toISOString().slice(0, 16) : '',
+        repeatEndDate: initialTask.repeat_config?.end_date ? utcToLocalDatetimeString(initialTask.repeat_config.end_date) : '',
       });
     }
   }, [initialTask]);
@@ -102,14 +103,14 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         browser: formData.browser,
         url: formData.url || null,
         browser_profile: formData.browserProfile || null,
-        start_time: new Date(formData.startTime).toISOString(),
-        close_time: formData.closeTime ? new Date(formData.closeTime).toISOString() : null,
+        start_time: localDatetimeStringToUtc(formData.startTime),
+        close_time: formData.closeTime ? localDatetimeStringToUtc(formData.closeTime) : null,
         timezone: formData.timezone,
         repeat_config: formData.repeatEnabled
           ? {
               interval: formData.repeatInterval,
               end_after: formData.repeatEndAfter ? parseInt(formData.repeatEndAfter) : null,
-              end_date: formData.repeatEndDate ? new Date(formData.repeatEndDate).toISOString() : null,
+              end_date: formData.repeatEndDate ? localDatetimeStringToUtc(formData.repeatEndDate) : null,
             }
           : null,
         status: initialTask?.status || TaskStatus.Active,
