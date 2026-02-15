@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Task, BrowserType, TaskStatus, RepeatInterval } from '../types/task';
 import { utcToLocalDatetimeString, localDatetimeStringToUtc } from '../utils/datetime';
+import * as chrono from 'chrono-node';
 
 interface TaskFormProps {
   initialTask: Task | null;
@@ -33,6 +34,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [installedBrowsers, setInstalledBrowsers] = useState<BrowserType[]>([]);
   const [defaultBrowser, setDefaultBrowser] = useState<BrowserType | null>(null);
+  const [naturalLanguageTime, setNaturalLanguageTime] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     browser: BrowserType.Chrome,
@@ -91,6 +93,33 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
       });
     }
   }, [initialTask]);
+
+  const handleNaturalLanguageInput = (input: string) => {
+    setNaturalLanguageTime(input);
+
+    if (!input.trim()) return;
+
+    // Parse the natural language date/time string
+    const results = chrono.parse(input);
+
+    if (results.length > 0) {
+      const parsed = results[0];
+
+      // Get start time
+      if (parsed.start) {
+        const startDate = parsed.start.date();
+        const startTimeStr = utcToLocalDatetimeString(startDate.toISOString());
+        setFormData(prev => ({ ...prev, startTime: startTimeStr }));
+      }
+
+      // Get end time if available (for "from X to Y" patterns)
+      if (parsed.end) {
+        const endDate = parsed.end.date();
+        const endTimeStr = utcToLocalDatetimeString(endDate.toISOString());
+        setFormData(prev => ({ ...prev, closeTime: endTimeStr }));
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,6 +234,23 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           placeholder="e.g., Profile 1"
         />
+      </div>
+
+      <div className="border-2 border-blue-200 dark:border-blue-800 rounded-lg p-4 bg-blue-50 dark:bg-blue-900/20">
+        <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Quick Time Entry (optional)
+          <InfoTooltip text="Enter times in natural language like 'January 31st from 9am to 11am ET' or 'tomorrow at 2pm to 4pm'. This will automatically fill the Start and Close Time fields below." />
+        </label>
+        <input
+          type="text"
+          value={naturalLanguageTime}
+          onChange={(e) => handleNaturalLanguageInput(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          placeholder="e.g., January 31st from 9am to 11am ET"
+        />
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Try: "next Friday at 3pm", "tomorrow from 9am to 5pm", "Jan 15th at 2:30pm"
+        </p>
       </div>
 
       <div>
