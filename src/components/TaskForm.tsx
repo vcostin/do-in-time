@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Task, BrowserType, TaskAction, TaskStatus, RepeatInterval } from '../types/task';
+import { invoke } from '@tauri-apps/api/core';
+import { Task, BrowserType, TaskStatus, RepeatInterval } from '../types/task';
 
 interface TaskFormProps {
   initialTask: Task | null;
@@ -29,13 +30,15 @@ const InfoTooltip = ({ text }: { text: string }) => (
 
 export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [installedBrowsers, setInstalledBrowsers] = useState<BrowserType[]>([]);
+  const [defaultBrowser, setDefaultBrowser] = useState<BrowserType | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     browser: BrowserType.Chrome,
-    action: TaskAction.Open,
     url: '',
     browserProfile: '',
-    scheduledTime: '',
+    startTime: '',
+    closeTime: '',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     repeatEnabled: false,
     repeatInterval: RepeatInterval.Daily,
@@ -43,15 +46,42 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
     repeatEndDate: '',
   });
 
+  // Detect installed browsers on mount
+  useEffect(() => {
+    const detectBrowsers = async () => {
+      try {
+        const installed = await invoke<BrowserType[]>('get_installed_browsers');
+        const defaultBr = await invoke<BrowserType | null>('get_default_browser');
+
+        setInstalledBrowsers(installed);
+        setDefaultBrowser(defaultBr);
+
+        // Set default browser if available and not editing an existing task
+        if (!initialTask && defaultBr && installed.includes(defaultBr)) {
+          setFormData(prev => ({ ...prev, browser: defaultBr }));
+        } else if (!initialTask && installed.length > 0) {
+          // If no default detected, use first installed browser
+          setFormData(prev => ({ ...prev, browser: installed[0] }));
+        }
+      } catch (error) {
+        console.error('Failed to detect browsers:', error);
+        // Fallback: use all browsers if detection fails
+        setInstalledBrowsers(Object.values(BrowserType));
+      }
+    };
+
+    detectBrowsers();
+  }, []);
+
   useEffect(() => {
     if (initialTask) {
       setFormData({
         name: initialTask.name,
         browser: initialTask.browser,
-        action: initialTask.action,
         url: initialTask.url || '',
         browserProfile: initialTask.browser_profile || '',
-        scheduledTime: initialTask.scheduled_time ? new Date(initialTask.scheduled_time).toISOString().slice(0, 16) : '',
+        startTime: initialTask.start_time ? new Date(initialTask.start_time).toISOString().slice(0, 16) : '',
+        closeTime: initialTask.close_time ? new Date(initialTask.close_time).toISOString().slice(0, 16) : '',
         timezone: initialTask.timezone,
         repeatEnabled: !!initialTask.repeat_config,
         repeatInterval: initialTask.repeat_config?.interval || RepeatInterval.Daily,
@@ -70,10 +100,10 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         id: initialTask?.id,
         name: formData.name,
         browser: formData.browser,
-        action: formData.action,
         url: formData.url || null,
         browser_profile: formData.browserProfile || null,
-        scheduled_time: new Date(formData.scheduledTime).toISOString(),
+        start_time: new Date(formData.startTime).toISOString(),
+        close_time: formData.closeTime ? new Date(formData.closeTime).toISOString() : null,
         timezone: formData.timezone,
         repeat_config: formData.repeatEnabled
           ? {
@@ -85,8 +115,10 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         status: initialTask?.status || TaskStatus.Active,
         created_at: initialTask?.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        last_executed: initialTask?.last_executed,
-        next_execution: initialTask?.next_execution,
+        last_open_execution: initialTask?.last_open_execution,
+        last_close_execution: initialTask?.last_close_execution,
+        next_open_execution: initialTask?.next_open_execution,
+        next_close_execution: initialTask?.next_close_execution,
       };
 
       await onSubmit(task);
@@ -120,56 +152,45 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div>
           <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Browser
-            <InfoTooltip text="Select which browser to control. Make sure the selected browser is installed on your system." />
+            <InfoTooltip text="Select which browser to control. Only browsers detected on your system are shown." />
           </label>
           <select
             value={formData.browser}
             onChange={(e) => setFormData({ ...formData, browser: e.target.value as BrowserType })}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           >
-            {Object.values(BrowserType).map((browser) => (
+            {(installedBrowsers.length > 0 ? installedBrowsers : Object.values(BrowserType)).map((browser) => (
               <option key={browser} value={browser} className="capitalize">
                 {browser.charAt(0).toUpperCase() + browser.slice(1)}
+                {browser === defaultBrowser ? ' (Default)' : ''}
               </option>
             ))}
           </select>
-        </div>
-
-        <div>
-          <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Action
-            <InfoTooltip text="Choose 'Open' to launch the browser or 'Close' to terminate all instances of the browser." />
-          </label>
-          <select
-            value={formData.action}
-            onChange={(e) => setFormData({ ...formData, action: e.target.value as TaskAction })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-          >
-            <option value={TaskAction.Open}>Open</option>
-            <option value={TaskAction.Close}>Close</option>
-          </select>
+          {installedBrowsers.length === 0 && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Detecting installed browsers...
+            </p>
+          )}
         </div>
       </div>
 
-      {formData.action === TaskAction.Open && (
-        <div>
-          <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            URL (optional)
-            <InfoTooltip text="The website to open when launching the browser. Leave empty to open the browser's default home page." />
-          </label>
-          <input
-            type="url"
-            value={formData.url}
-            onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            placeholder="https://example.com"
-          />
-        </div>
-      )}
+      <div>
+        <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          URL (optional)
+          <InfoTooltip text="The website to open when launching the browser. Leave empty to open the browser's default home page." />
+        </label>
+        <input
+          type="url"
+          value={formData.url}
+          onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          placeholder="https://example.com"
+        />
+      </div>
 
       <div>
         <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -187,14 +208,27 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
 
       <div>
         <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Scheduled Time
-          <InfoTooltip text="The exact date and time when this task should execute. The task will run in your local timezone." />
+          Start Time
+          <InfoTooltip text="The exact date and time when the browser should open. The task will run in your local timezone." />
         </label>
         <input
           type="datetime-local"
           required
-          value={formData.scheduledTime}
-          onChange={(e) => setFormData({ ...formData, scheduledTime: e.target.value })}
+          value={formData.startTime}
+          onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Close Time (optional)
+          <InfoTooltip text="Optional: date and time when the browser should automatically close. Leave empty if you don't want to automatically close the browser." />
+        </label>
+        <input
+          type="datetime-local"
+          value={formData.closeTime}
+          onChange={(e) => setFormData({ ...formData, closeTime: e.target.value })}
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
         />
       </div>

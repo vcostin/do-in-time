@@ -4,8 +4,9 @@ mod commands;
 mod core;
 mod db;
 mod error;
+mod utils;
 
-use commands::{scheduler_commands, task_commands};
+use commands::{browser_commands, scheduler_commands, task_commands};
 use core::TaskScheduler;
 use db::Database;
 
@@ -44,6 +45,8 @@ pub fn run() {
                 scheduler_commands::start_scheduler,
                 scheduler_commands::stop_scheduler,
                 scheduler_commands::get_scheduler_status,
+                browser_commands::get_installed_browsers,
+                browser_commands::get_default_browser,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

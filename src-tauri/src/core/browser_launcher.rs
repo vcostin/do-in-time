@@ -1,6 +1,9 @@
 use crate::db::models::BrowserType;
 use crate::error::{AppError, Result};
-use std::process::Command;
+use crate::utils::validation::validate_browser_profile;
+#[cfg(target_os = "macos")]
+use crate::utils::validation::escape_applescript_string;
+use std::process::{Child, Command};
 
 pub struct BrowserLauncher;
 
@@ -9,12 +12,13 @@ impl BrowserLauncher {
         Self
     }
 
+    /// Open browser in existing session (preserves logged-in state)
     pub async fn open_browser(
         &self,
         browser: &BrowserType,
         url: Option<&str>,
         profile: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<Option<u32>> {
         let (command, mut args) = self.get_browser_command(browser, profile)?;
 
         // Add URL if provided
@@ -22,50 +26,148 @@ impl BrowserLauncher {
             args.push(u.to_string());
         }
 
+        let child = self.spawn_browser(&command, &args, browser)?;
+        let pid = child.map(|c| c.id());
+
+        if let Some(u) = url {
+            println!("Opening {} with URL: {}", browser, u);
+        } else {
+            println!("Opening {}", browser);
+        }
+
+        Ok(pid)
+    }
+
+    fn spawn_browser(&self, command: &str, args: &[String], browser: &BrowserType) -> Result<Option<Child>> {
         #[cfg(target_os = "windows")]
         {
-            let mut cmd = Command::new("cmd");
-            cmd.arg("/C")
-                .arg("start")
-                .arg("")
-                .arg(&command);
-
-            for arg in &args {
+            // On Windows, launch directly to get PID
+            let mut cmd = Command::new(command);
+            for arg in args {
                 cmd.arg(arg);
             }
 
-            cmd.spawn()
-                .map_err(|e| AppError::Scheduler(format!("Failed to open {}: {}", browser, e)))?;
+            let child = cmd
+                .spawn()
+                .map_err(|e| AppError::Scheduler(format!("Failed to launch {}: {}", browser, e)))?;
+
+            Ok(Some(child))
         }
 
         #[cfg(target_os = "macos")]
         {
+            // On macOS, use open command but can't easily track PID
             let mut cmd = Command::new("open");
-            cmd.arg("-a").arg(&command);
+            cmd.arg("-a").arg(command);
 
             if !args.is_empty() {
                 cmd.arg("--args");
-                for arg in &args {
+                for arg in args {
                     cmd.arg(arg);
                 }
             }
 
             cmd.spawn()
-                .map_err(|e| AppError::Scheduler(format!("Failed to open {}: {}", browser, e)))?;
+                .map_err(|e| AppError::Scheduler(format!("Failed to launch {}: {}", browser, e)))?;
+
+            // Can't reliably get PID on macOS with open command
+            Ok(None)
         }
 
         #[cfg(target_os = "linux")]
         {
-            let mut cmd = Command::new(&command);
-            for arg in &args {
+            let mut cmd = Command::new(command);
+            for arg in args {
                 cmd.arg(arg);
             }
 
-            cmd.spawn()
-                .map_err(|e| AppError::Scheduler(format!("Failed to open {}: {}", browser, e)))?;
+            let child = cmd
+                .spawn()
+                .map_err(|e| AppError::Scheduler(format!("Failed to launch {}: {}", browser, e)))?;
+
+            Ok(Some(child))
+        }
+    }
+
+    /// Close browser tabs/windows that match the given URL
+    ///
+    /// Platform-specific implementations:
+    /// - macOS: Uses AppleScript to close tabs matching URL (automatic)
+    /// - Windows: Manual close required (no native tab-level control available)
+    /// - Linux: Closes all browser instances (fallback)
+    ///
+    /// ## Windows Limitation
+    ///
+    /// Unlike macOS which has AppleScript for scriptable browser control, Windows does not
+    /// provide a native, straightforward mechanism to close specific browser tabs programmatically.
+    ///
+    /// Why native solutions don't work on Windows:
+    /// - **PowerShell cmdlet approach**: Process command lines don't contain tab URLs in Chromium browsers
+    /// - **UI Automation API**: Complex to implement, unreliable for dynamic web content
+    /// - **Window title matching**: Fragile, titles change frequently and aren't unique
+    ///
+    /// Alternative solutions (not implemented due to complexity):
+    /// - **Chrome DevTools Protocol (CDP)**: Requires browser to run with `--remote-debugging-port` flag
+    /// - **Browser extensions**: Requires pre-installation and browser-specific implementations
+    /// - **Native messaging**: Requires separate browser extension for each browser
+    ///
+    /// For now, Windows users must manually close tabs after they're opened by the scheduler.
+    pub async fn close_browser_by_url(&self, browser: &BrowserType, url: &str) -> Result<()> {
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: Manual close required
+            // See function documentation above for detailed explanation of Windows limitations
+            println!(
+                "⚠ Windows: Please manually close the {} tab with URL: {}",
+                browser, url
+            );
+            println!("Automatic tab closing is not available on Windows without additional setup.");
+            Ok(())
         }
 
-        Ok(())
+        #[cfg(target_os = "macos")]
+        {
+            // Use AppleScript like the original Deno implementation
+            let app_name = match browser {
+                BrowserType::Chrome => "Google Chrome",
+                BrowserType::Edge => "Microsoft Edge",
+                BrowserType::Firefox => "Firefox",
+                BrowserType::Safari => "Safari",
+                BrowserType::Brave => "Brave Browser",
+                BrowserType::Opera => "Opera",
+            };
+
+            // Sanitize URL to prevent AppleScript injection
+            let escaped_url = escape_applescript_string(url);
+
+            let script = format!(
+                r#"tell application "{}"
+                    close (every tab of every window whose URL contains "{}")
+                end tell"#,
+                app_name, escaped_url
+            );
+
+            let output = Command::new("osascript")
+                .arg("-e")
+                .arg(&script)
+                .output()
+                .map_err(|e| AppError::Scheduler(format!("Failed to execute AppleScript: {}", e)))?;
+
+            if output.status.success() {
+                println!("Successfully closed {} tab(s) with URL: {}", browser, url);
+                Ok(())
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                Err(AppError::Scheduler(format!("AppleScript error: {}", stderr)))
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // Linux: fallback to closing all instances since we don't have easy tab control
+            println!("Linux: URL-based closing not supported, closing all {} instances", browser);
+            self.close_browser(browser).await
+        }
     }
 
     pub async fn close_browser(&self, browser: &BrowserType) -> Result<()> {
@@ -106,6 +208,11 @@ impl BrowserLauncher {
         browser: &BrowserType,
         profile: Option<&str>,
     ) -> Result<(String, Vec<String>)> {
+        // Validate browser profile for security
+        if let Some(prof) = profile {
+            validate_browser_profile(prof)?;
+        }
+
         let mut args = Vec::new();
 
         let command = match browser {

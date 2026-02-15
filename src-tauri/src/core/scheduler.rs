@@ -37,26 +37,41 @@ impl TaskScheduler {
 
         tokio::spawn(async move {
             while *running_clone.read().await {
-                // Get next task to execute
-                match db_clone.get_next_task().await {
-                    Ok(Some(task)) => {
+                // Get next action to execute (either open or close)
+                match db_clone.get_next_action().await {
+                    Ok(Some((task, action))) => {
                         let now = Utc::now();
-                        let task_time = task.next_execution.unwrap_or(task.scheduled_time);
 
-                        if task_time <= now {
-                            // Execute task
-                            let task_name = task.name.clone();
-                            if let Err(e) = executor_clone.execute(task).await {
-                                eprintln!("Failed to execute task '{}': {}", task_name, e);
+                        // Determine which execution time to check based on action
+                        let action_time = match action {
+                            crate::db::ExecutionAction::Open => task.next_open_execution,
+                            crate::db::ExecutionAction::Close => task.next_close_execution,
+                        };
+
+                        if let Some(execution_time) = action_time {
+                            if execution_time <= now {
+                                // Execute task with the specific action
+                                let task_name = task.name.clone();
+                                let action_str = match action {
+                                    crate::db::ExecutionAction::Open => "open",
+                                    crate::db::ExecutionAction::Close => "close",
+                                };
+
+                                if let Err(e) = executor_clone.execute(task, action).await {
+                                    eprintln!("Failed to {} task '{}': {}", action_str, task_name, e);
+                                }
+                            } else {
+                                // Sleep until next action (with max 60 seconds interval)
+                                let duration = (execution_time - now)
+                                    .to_std()
+                                    .unwrap_or(Duration::from_secs(60))
+                                    .min(Duration::from_secs(60));
+
+                                sleep(duration).await;
                             }
                         } else {
-                            // Sleep until next task (with max 60 seconds interval)
-                            let duration = (task_time - now)
-                                .to_std()
-                                .unwrap_or(Duration::from_secs(60))
-                                .min(Duration::from_secs(60));
-
-                            sleep(duration).await;
+                            // No execution time set, sleep briefly
+                            sleep(Duration::from_secs(10)).await;
                         }
                     }
                     Ok(None) => {
@@ -64,7 +79,7 @@ impl TaskScheduler {
                         sleep(Duration::from_secs(10)).await;
                     }
                     Err(e) => {
-                        eprintln!("Error fetching next task: {}", e);
+                        eprintln!("Error fetching next action: {}", e);
                         sleep(Duration::from_secs(5)).await;
                     }
                 }

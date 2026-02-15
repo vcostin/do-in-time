@@ -1,4 +1,4 @@
-import { Task, TaskAction, TaskStatus } from '../types/task';
+import { Task, TaskStatus } from '../types/task';
 import { format } from 'date-fns';
 
 interface TaskItemProps {
@@ -43,11 +43,6 @@ export function TaskItem({ task, onEdit, onDelete }: TaskItemProps) {
               <span className="capitalize">{task.browser}</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="font-medium">Action:</span>
-              <span className="capitalize">{task.action === TaskAction.Open ? '📂 Open' : '❌ Close'}</span>
-            </div>
-
             {task.url && (
               <div className="flex items-center gap-2">
                 <span className="font-medium">URL:</span>
@@ -56,14 +51,28 @@ export function TaskItem({ task, onEdit, onDelete }: TaskItemProps) {
             )}
 
             <div className="flex items-center gap-2">
-              <span className="font-medium">Scheduled:</span>
-              <span>{formatDate(task.scheduled_time)}</span>
+              <span className="font-medium">Start Time:</span>
+              <span>{formatDate(task.start_time)}</span>
             </div>
 
-            {task.next_execution && (
+            {task.close_time && (
               <div className="flex items-center gap-2">
-                <span className="font-medium">Next Execution:</span>
-                <span>{formatDate(task.next_execution)}</span>
+                <span className="font-medium">Close Time:</span>
+                <span>{formatDate(task.close_time)}</span>
+              </div>
+            )}
+
+            {task.next_open_execution && (
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Next Open:</span>
+                <span>{formatDate(task.next_open_execution)}</span>
+              </div>
+            )}
+
+            {task.next_close_execution && (
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Next Close:</span>
+                <span>{formatDate(task.next_close_execution)}</span>
               </div>
             )}
 

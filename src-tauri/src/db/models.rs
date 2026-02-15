@@ -8,15 +8,17 @@ pub struct Task {
     pub browser: BrowserType,
     pub browser_profile: Option<String>,
     pub url: Option<String>,
-    pub action: TaskAction,
-    pub scheduled_time: DateTime<Utc>,
+    pub start_time: DateTime<Utc>,      // When to open browser
+    pub close_time: Option<DateTime<Utc>>, // Optional: when to close browser
     pub timezone: String,
     pub repeat_config: Option<RepeatConfig>,
     pub status: TaskStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub last_executed: Option<DateTime<Utc>>,
-    pub next_execution: Option<DateTime<Utc>>,
+    pub last_open_execution: Option<DateTime<Utc>>,
+    pub last_close_execution: Option<DateTime<Utc>>,
+    pub next_open_execution: Option<DateTime<Utc>>,
+    pub next_close_execution: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -56,35 +58,6 @@ impl std::str::FromStr for BrowserType {
             "brave" => Ok(BrowserType::Brave),
             "opera" => Ok(BrowserType::Opera),
             _ => Err(format!("Unknown browser type: {}", s)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum TaskAction {
-    Open,
-    Close,
-}
-
-impl std::fmt::Display for TaskAction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            TaskAction::Open => "open",
-            TaskAction::Close => "close",
-        };
-        write!(f, "{}", s)
-    }
-}
-
-impl std::str::FromStr for TaskAction {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "open" => Ok(TaskAction::Open),
-            "close" => Ok(TaskAction::Close),
-            _ => Err(format!("Unknown task action: {}", s)),
         }
     }
 }
@@ -171,8 +144,38 @@ pub struct TaskExecution {
     pub id: i64,
     pub task_id: i64,
     pub executed_at: DateTime<Utc>,
+    pub action: ExecutionAction,
     pub status: ExecutionStatus,
     pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ExecutionAction {
+    Open,
+    Close,
+}
+
+impl std::fmt::Display for ExecutionAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ExecutionAction::Open => "open",
+            ExecutionAction::Close => "close",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl std::str::FromStr for ExecutionAction {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "open" => Ok(ExecutionAction::Open),
+            "close" => Ok(ExecutionAction::Close),
+            _ => Err(format!("Unknown execution action: {}", s)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -209,8 +212,7 @@ impl Task {
     pub fn new(
         name: String,
         browser: BrowserType,
-        action: TaskAction,
-        scheduled_time: DateTime<Utc>,
+        start_time: DateTime<Utc>,
         timezone: String,
     ) -> Self {
         let now = Utc::now();
@@ -220,15 +222,17 @@ impl Task {
             browser,
             browser_profile: None,
             url: None,
-            action,
-            scheduled_time,
+            start_time,
+            close_time: None,
             timezone,
             repeat_config: None,
             status: TaskStatus::Active,
             created_at: now,
             updated_at: now,
-            last_executed: None,
-            next_execution: Some(scheduled_time),
+            last_open_execution: None,
+            last_close_execution: None,
+            next_open_execution: Some(start_time),
+            next_close_execution: None,
         }
     }
 }
