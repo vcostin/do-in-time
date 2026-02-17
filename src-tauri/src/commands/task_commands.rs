@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tauri::State;
-use crate::db::{Database, Task, TaskExecution};
+use crate::db::{Database, Task};
 
 #[tauri::command]
 pub async fn get_all_tasks(db: State<'_, Arc<Database>>) -> Result<Vec<Task>, String> {
@@ -43,16 +43,6 @@ pub async fn delete_task(
     db: State<'_, Arc<Database>>,
 ) -> Result<(), String> {
     db.delete_task(id)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn get_task_history(
-    task_id: i64,
-    db: State<'_, Arc<Database>>,
-) -> Result<Vec<TaskExecution>, String> {
-    db.get_task_executions(task_id)
         .await
         .map_err(|e| e.to_string())
 }

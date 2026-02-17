@@ -48,7 +48,6 @@ pub fn run() {
             task_commands::create_task,
             task_commands::update_task,
             task_commands::delete_task,
-            task_commands::get_task_history,
             scheduler_commands::start_scheduler,
             scheduler_commands::stop_scheduler,
             scheduler_commands::get_scheduler_status,

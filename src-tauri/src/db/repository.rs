@@ -1,5 +1,4 @@
 use sqlx::Row;
-use chrono::Utc;
 use crate::db::models::*;
 use crate::db::connection::Database;
 use crate::error::{AppError, Result};
@@ -16,10 +15,6 @@ impl Database {
             validate_browser_profile(profile)?;
         }
 
-        let now = Utc::now();
-        task.created_at = now;
-        task.updated_at = now;
-
         if task.next_open_execution.is_none() {
             task.next_open_execution = Some(task.start_time);
         }
@@ -35,11 +30,12 @@ impl Database {
         let result = sqlx::query(
             r#"
             INSERT INTO tasks (
-                name, browser, browser_profile, url, allow_close_all, start_time, close_time, timezone,
-                repeat_interval, repeat_end_after, repeat_end_date, status,
-                created_at, updated_at, last_open_execution, last_close_execution,
+                name, browser, browser_profile, url, allow_close_all,
+                start_time, close_time, timezone,
+                repeat_interval, repeat_end_after, repeat_end_date,
+                execution_count, status,
                 next_open_execution, next_close_execution
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&task.name)
@@ -53,11 +49,8 @@ impl Database {
         .bind(repeat_interval)
         .bind(repeat_end_after)
         .bind(repeat_end_date)
+        .bind(task.execution_count)
         .bind(task.status.to_string())
-        .bind(now.to_rfc3339())
-        .bind(now.to_rfc3339())
-        .bind(task.last_open_execution.map(|d| d.to_rfc3339()))
-        .bind(task.last_close_execution.map(|d| d.to_rfc3339()))
         .bind(task.next_open_execution.map(|d| d.to_rfc3339()))
         .bind(task.next_close_execution.map(|d| d.to_rfc3339()))
         .execute(self.pool())
@@ -137,8 +130,6 @@ impl Database {
             validate_browser_profile(profile)?;
         }
 
-        task.updated_at = Utc::now();
-
         // Get old task to check if times have changed
         let old_task = self.get_task(id).await?;
 
@@ -147,13 +138,11 @@ impl Database {
             || old_task.close_time != task.close_time;
 
         if times_changed {
-            let now = Utc::now();
+            let now = chrono::Utc::now();
 
             // If task was completed/failed, reactivate it
             if task.status == TaskStatus::Completed || task.status == TaskStatus::Failed {
                 task.status = TaskStatus::Active;
-                task.last_open_execution = None;
-                task.last_close_execution = None;
             }
 
             // Recalculate next execution times based on current time and new scheduled times
@@ -184,8 +173,7 @@ impl Database {
                 name = ?, browser = ?, browser_profile = ?, url = ?, allow_close_all = ?,
                 start_time = ?, close_time = ?, timezone = ?,
                 repeat_interval = ?, repeat_end_after = ?, repeat_end_date = ?,
-                status = ?, updated_at = ?,
-                last_open_execution = ?, last_close_execution = ?,
+                execution_count = ?, status = ?,
                 next_open_execution = ?, next_close_execution = ?
             WHERE id = ?
             "#,
@@ -201,10 +189,8 @@ impl Database {
         .bind(repeat_interval)
         .bind(repeat_end_after)
         .bind(repeat_end_date)
+        .bind(task.execution_count)
         .bind(task.status.to_string())
-        .bind(task.updated_at.to_rfc3339())
-        .bind(task.last_open_execution.map(|d| d.to_rfc3339()))
-        .bind(task.last_close_execution.map(|d| d.to_rfc3339()))
         .bind(task.next_open_execution.map(|d| d.to_rfc3339()))
         .bind(task.next_close_execution.map(|d| d.to_rfc3339()))
         .bind(id)
@@ -222,51 +208,6 @@ impl Database {
             .await?;
 
         Ok(())
-    }
-
-    pub async fn log_execution(&self, task_id: i64, action: ExecutionAction, status: ExecutionStatus, error_message: Option<String>) -> Result<()> {
-        sqlx::query(
-            r#"
-            INSERT INTO task_executions (task_id, executed_at, action, status, error_message)
-            VALUES (?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(task_id)
-        .bind(Utc::now().to_rfc3339())
-        .bind(action.to_string())
-        .bind(status.to_string())
-        .bind(error_message)
-        .execute(self.pool())
-        .await?;
-
-        Ok(())
-    }
-
-    pub async fn get_task_executions(&self, task_id: i64) -> Result<Vec<TaskExecution>> {
-        let rows = sqlx::query(
-            r#"
-            SELECT * FROM task_executions
-            WHERE task_id = ?
-            ORDER BY executed_at DESC
-            LIMIT 50
-            "#,
-        )
-        .bind(task_id)
-        .fetch_all(self.pool())
-        .await?;
-
-        rows.into_iter()
-            .map(|row| {
-                Ok(TaskExecution {
-                    id: row.get("id"),
-                    task_id: row.get("task_id"),
-                    executed_at: row.get::<String, _>("executed_at").parse().map_err(|e| AppError::TimeParse(format!("{}", e)))?,
-                    action: ExecutionAction::from_str(&row.get::<String, _>("action")).map_err(|e| AppError::InvalidTask(e))?,
-                    status: ExecutionStatus::from_str(&row.get::<String, _>("status")).map_err(|e| AppError::InvalidTask(e))?,
-                    error_message: row.get("error_message"),
-                })
-            })
-            .collect()
     }
 
     fn row_to_task(row: sqlx::sqlite::SqliteRow) -> Result<Task> {
@@ -292,11 +233,8 @@ impl Database {
             close_time: row.get::<Option<String>, _>("close_time").and_then(|s| s.parse().ok()),
             timezone: row.get("timezone"),
             repeat_config,
+            execution_count: row.get("execution_count"),
             status: TaskStatus::from_str(&row.get::<String, _>("status")).map_err(|e| AppError::InvalidTask(e))?,
-            created_at: row.get::<String, _>("created_at").parse().map_err(|e| AppError::TimeParse(format!("{}", e)))?,
-            updated_at: row.get::<String, _>("updated_at").parse().map_err(|e| AppError::TimeParse(format!("{}", e)))?,
-            last_open_execution: row.get::<Option<String>, _>("last_open_execution").and_then(|s| s.parse().ok()),
-            last_close_execution: row.get::<Option<String>, _>("last_close_execution").and_then(|s| s.parse().ok()),
             next_open_execution: row.get::<Option<String>, _>("next_open_execution").and_then(|s| s.parse().ok()),
             next_close_execution: row.get::<Option<String>, _>("next_close_execution").and_then(|s| s.parse().ok()),
         })

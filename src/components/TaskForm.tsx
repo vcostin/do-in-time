@@ -145,11 +145,8 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
               end_date: formData.repeatEndDate ? localDatetimeStringToUtc(formData.repeatEndDate) : null,
             }
           : null,
+        execution_count: initialTask?.execution_count || 0,
         status: initialTask?.status || TaskStatus.Active,
-        created_at: initialTask?.created_at || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        last_open_execution: initialTask?.last_open_execution,
-        last_close_execution: initialTask?.last_close_execution,
         next_open_execution: initialTask?.next_open_execution,
         next_close_execution: initialTask?.next_close_execution,
       };

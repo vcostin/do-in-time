@@ -9,11 +9,9 @@ interface TaskItemProps {
 
 export function TaskItem({ task, onEdit, onDelete }: TaskItemProps) {
   const statusColors = {
-    [TaskStatus.Pending]: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
     [TaskStatus.Active]: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
     [TaskStatus.Completed]: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
     [TaskStatus.Failed]: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
-    [TaskStatus.Disabled]: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
   };
 
   const formatDate = (dateStr: string) => {

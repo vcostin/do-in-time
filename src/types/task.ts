@@ -7,17 +7,10 @@ export enum BrowserType {
   Opera = 'opera',
 }
 
-export enum ExecutionAction {
-  Open = 'open',
-  Close = 'close',
-}
-
 export enum TaskStatus {
-  Pending = 'pending',
   Active = 'active',
   Completed = 'completed',
   Failed = 'failed',
-  Disabled = 'disabled',
 }
 
 export enum RepeatInterval {
@@ -39,26 +32,14 @@ export interface Task {
   browser_profile?: string | null;
   url?: string | null;
   allow_close_all: boolean;
-  start_time: string;  // When to open browser
-  close_time?: string | null;  // Optional: when to close browser
+  start_time: string;
+  close_time?: string | null;
   timezone: string;
   repeat_config?: RepeatConfig | null;
+  execution_count: number;
   status: TaskStatus;
-  created_at: string;
-  updated_at: string;
-  last_open_execution?: string | null;
-  last_close_execution?: string | null;
   next_open_execution?: string | null;
   next_close_execution?: string | null;
-}
-
-export interface TaskExecution {
-  id: number;
-  task_id: number;
-  executed_at: string;
-  action: ExecutionAction;
-  status: 'success' | 'failed';
-  error_message?: string | null;
 }
 
 export interface SchedulerStatus {
