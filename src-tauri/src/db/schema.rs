@@ -58,5 +58,30 @@ pub async fn initialize_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Create settings table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Initialize default settings
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO settings (key, value) VALUES
+            ('minimize_to_tray', 'false'),
+            ('start_minimized', 'false'),
+            ('show_notifications', 'false'),
+            ('auto_start', 'false')
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

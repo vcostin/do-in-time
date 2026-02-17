@@ -239,4 +239,48 @@ impl Database {
             next_close_execution: row.get::<Option<String>, _>("next_close_execution").and_then(|s| s.parse().ok()),
         })
     }
+
+    pub async fn get_settings(&self) -> Result<AppSettings> {
+        let rows = sqlx::query("SELECT key, value FROM settings")
+            .fetch_all(self.pool())
+            .await?;
+
+        let mut settings = AppSettings::default();
+
+        for row in rows {
+            let key: String = row.get("key");
+            let value: String = row.get("value");
+            let bool_value = value == "true";
+
+            match key.as_str() {
+                "minimize_to_tray" => settings.minimize_to_tray = bool_value,
+                "start_minimized" => settings.start_minimized = bool_value,
+                "show_notifications" => settings.show_notifications = bool_value,
+                "auto_start" => settings.auto_start = bool_value,
+                _ => {}
+            }
+        }
+
+        Ok(settings)
+    }
+
+    pub async fn update_setting(&self, key: &str, value: bool) -> Result<()> {
+        let value_str = if value { "true" } else { "false" };
+
+        sqlx::query("UPDATE settings SET value = ? WHERE key = ?")
+            .bind(value_str)
+            .bind(key)
+            .execute(self.pool())
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn update_settings(&self, settings: AppSettings) -> Result<()> {
+        self.update_setting("minimize_to_tray", settings.minimize_to_tray).await?;
+        self.update_setting("start_minimized", settings.start_minimized).await?;
+        self.update_setting("show_notifications", settings.show_notifications).await?;
+        self.update_setting("auto_start", settings.auto_start).await?;
+        Ok(())
+    }
 }

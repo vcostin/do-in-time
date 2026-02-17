@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { Task, SchedulerStatus } from '../types/task';
+import { Task, SchedulerStatus, AppSettings } from '../types/task';
 
 export class TauriTaskService {
   static async getAllTasks(): Promise<Task[]> {
@@ -32,5 +32,21 @@ export class TauriTaskService {
 
   static async getSchedulerStatus(): Promise<SchedulerStatus> {
     return invoke<SchedulerStatus>('get_scheduler_status');
+  }
+
+  static async getSettings(): Promise<AppSettings> {
+    return invoke<AppSettings>('get_settings');
+  }
+
+  static async updateSettings(settings: AppSettings): Promise<AppSettings> {
+    return invoke<AppSettings>('update_settings', { settings });
+  }
+
+  static async applyAutoStart(enabled: boolean): Promise<void> {
+    return invoke<void>('apply_auto_start', { enabled });
+  }
+
+  static async toggleWindowVisibility(): Promise<void> {
+    return invoke<void>('toggle_window_visibility');
   }
 }

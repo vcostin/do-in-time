@@ -45,3 +45,10 @@ export interface Task {
 export interface SchedulerStatus {
   running: boolean;
 }
+
+export interface AppSettings {
+  minimize_to_tray: boolean;
+  start_minimized: boolean;
+  show_notifications: boolean;
+  auto_start: boolean;
+}

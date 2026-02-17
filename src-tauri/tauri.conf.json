@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Browser Scheduler",
         "width": 1000,
         "height": 700

@@ -6,6 +6,7 @@ use crate::db::{Database, ExecutionAction, RepeatInterval, Task, TaskStatus};
 use crate::error::Result;
 use crate::utils::validation::{validate_browser_profile, validate_url};
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_notification::NotificationExt;
 
 pub struct TaskExecutor {
     browser_launcher: BrowserLauncher,
@@ -114,8 +115,11 @@ impl TaskExecutor {
                     }
                 }
 
-                self.db.update_task(task_id, task).await?;
+                self.db.update_task(task_id, task.clone()).await?;
                 let _ = self.app_handle.emit("task-updated", task_id);
+
+                // Send notification if enabled
+                self.send_notification_if_enabled(&task, &action).await;
 
                 Ok(())
             }
@@ -197,5 +201,38 @@ impl TaskExecutor {
         };
 
         Ok(next_local.with_timezone(&Utc))
+    }
+
+    async fn send_notification_if_enabled(&self, task: &Task, action: &ExecutionAction) {
+        // Get settings from database
+        let settings = match self.db.get_settings().await {
+            Ok(s) => s,
+            Err(_) => return, // Silently fail if we can't get settings
+        };
+
+        // Only send notification if enabled
+        if !settings.show_notifications {
+            return;
+        }
+
+        // Build notification message
+        let action_text = match action {
+            ExecutionAction::Open => "opened",
+            ExecutionAction::Close => "closed",
+        };
+
+        let message = if let Some(ref url) = task.url {
+            format!("{} {} in {}", action_text, url, task.browser)
+        } else {
+            format!("{} {}", action_text, task.browser)
+        };
+
+        // Send notification using tauri-plugin-notification
+        let _ = self.app_handle
+            .notification()
+            .builder()
+            .title(format!("Task: {}", task.name))
+            .body(message)
+            .show();
     }
 }
