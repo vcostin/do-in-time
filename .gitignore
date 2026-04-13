@@ -75,3 +75,4 @@ $RECYCLE.BIN/
 
 # Claude Code temp files
 tmpclaude-*
+.claude/*
