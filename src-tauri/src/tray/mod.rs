@@ -2,7 +2,6 @@ use tauri::{
     AppHandle, Manager, Emitter,
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState, TrayIcon},
-    image::Image,
 };
 
 // Helper function to create menu
@@ -19,38 +18,7 @@ fn create_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
 }
 
 pub fn create_tray(app: &AppHandle) -> Result<TrayIcon<tauri::Wry>, String> {
-    // Use platform-specific icon formats for best compatibility
-    let icon_filename = if cfg!(target_os = "windows") {
-        "icons/icon.ico"
-    } else if cfg!(target_os = "macos") {
-        "icons/icon.icns"
-    } else {
-        "icons/32x32.png"
-    };
-
-    // Try to load icon using Tauri's resource resolver (production)
-    // Fall back to relative path (development)
-    let icon_bytes = app.path()
-        .resolve(icon_filename, tauri::path::BaseDirectory::Resource)
-        .ok()
-        .and_then(|path| std::fs::read(&path).ok())
-        .or_else(|| {
-            // Fallback for dev mode: load from source directory
-            let dev_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join(icon_filename);
-            std::fs::read(&dev_path).ok()
-        })
-        .ok_or_else(|| format!("Failed to load icon from {}", icon_filename))?;
-
-    // Decode image to RGBA
-    let img = image::load_from_memory(&icon_bytes)
-        .map_err(|e| format!("Failed to decode icon: {}", e))?
-        .to_rgba8();
-
-    let (width, height) = img.dimensions();
-    let rgba = img.into_raw();
-
-    let icon = Image::new_owned(rgba, width, height);
+    let icon = tauri::include_image!("icons/32x32.png");
 
     // Create menu
     let menu = create_menu(app)?;
