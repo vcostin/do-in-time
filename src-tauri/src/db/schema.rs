@@ -1,5 +1,5 @@
-use sqlx::sqlite::SqlitePool;
 use crate::error::Result;
+use sqlx::sqlite::SqlitePool;
 
 pub async fn initialize_schema(pool: &SqlitePool) -> Result<()> {
     // Create tasks table

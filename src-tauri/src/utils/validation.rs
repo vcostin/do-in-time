@@ -16,35 +16,28 @@ pub fn validate_url(url: &str) -> Result<()> {
     }
 
     // Check for dangerous URL schemes
-    let dangerous_schemes = [
-        "javascript:",
-        "data:",
-        "vbscript:",
-        "file:",
-        "about:",
-    ];
+    let dangerous_schemes = ["javascript:", "data:", "vbscript:", "file:", "about:"];
 
     let url_lower = url_trimmed.to_lowercase();
     for scheme in &dangerous_schemes {
         if url_lower.starts_with(scheme) {
-            return Err(AppError::InvalidTask(
-                format!("Dangerous URL scheme not allowed: {}", scheme)
-            ));
+            return Err(AppError::InvalidTask(format!(
+                "Dangerous URL scheme not allowed: {}",
+                scheme
+            )));
         }
     }
 
     // Ensure URL starts with http:// or https://
     if !url_lower.starts_with("http://") && !url_lower.starts_with("https://") {
         return Err(AppError::InvalidTask(
-            "URL must start with http:// or https://".to_string()
+            "URL must start with http:// or https://".to_string(),
         ));
     }
 
     // Basic URL validation - check for domain
     if url_trimmed.len() < 10 || !url_trimmed.contains('.') {
-        return Err(AppError::InvalidTask(
-            "Invalid URL format".to_string()
-        ));
+        return Err(AppError::InvalidTask("Invalid URL format".to_string()));
     }
 
     Ok(())
@@ -66,23 +59,27 @@ pub fn validate_browser_profile(profile: &str) -> Result<()> {
     // Check length
     if profile_trimmed.len() > 100 {
         return Err(AppError::InvalidTask(
-            "Browser profile name too long (max 100 characters)".to_string()
+            "Browser profile name too long (max 100 characters)".to_string(),
         ));
     }
 
     // Check for path traversal attempts
-    if profile_trimmed.contains("..") || profile_trimmed.contains('/') || profile_trimmed.contains('\\') {
+    if profile_trimmed.contains("..")
+        || profile_trimmed.contains('/')
+        || profile_trimmed.contains('\\')
+    {
         return Err(AppError::InvalidTask(
-            "Browser profile name cannot contain path separators or '..'".to_string()
+            "Browser profile name cannot contain path separators or '..'".to_string(),
         ));
     }
 
     // Check for dangerous characters
     for c in profile_trimmed.chars() {
         if !c.is_alphanumeric() && c != '-' && c != '_' && c != ' ' {
-            return Err(AppError::InvalidTask(
-                format!("Browser profile name contains invalid character: '{}'", c)
-            ));
+            return Err(AppError::InvalidTask(format!(
+                "Browser profile name contains invalid character: '{}'",
+                c
+            )));
         }
     }
 
@@ -163,8 +160,14 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_escape_applescript() {
         assert_eq!(escape_applescript_string("normal text"), "normal text");
-        assert_eq!(escape_applescript_string("text with \"quotes\""), "text with \\\"quotes\\\"");
-        assert_eq!(escape_applescript_string("path\\with\\backslashes"), "path\\\\with\\\\backslashes");
+        assert_eq!(
+            escape_applescript_string("text with \"quotes\""),
+            "text with \\\"quotes\\\""
+        );
+        assert_eq!(
+            escape_applescript_string("path\\with\\backslashes"),
+            "path\\\\with\\\\backslashes"
+        );
         assert_eq!(
             escape_applescript_string("malicious\" end tell tell application \"Terminal"),
             "malicious\\\" end tell tell application \\\"Terminal"

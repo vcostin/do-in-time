@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use chrono::{Datelike, Duration, Timelike, TimeZone, Utc};
-use chrono_tz::Tz;
 use crate::core::browser_launcher::BrowserLauncher;
 use crate::db::{Database, ExecutionAction, RepeatInterval, Task, TaskStatus};
 use crate::error::Result;
 use crate::utils::validation::{validate_browser_profile, validate_url};
+use chrono::{Datelike, Duration, TimeZone, Timelike, Utc};
+use chrono_tz::Tz;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
 
@@ -36,16 +36,15 @@ impl TaskExecutor {
 
         // Execute the browser action
         let result = match action {
-            ExecutionAction::Open => {
-                self.browser_launcher
-                    .open_browser(
-                        &task.browser,
-                        task.url.as_deref(),
-                        task.browser_profile.as_deref(),
-                    )
-                    .await
-                    .map(|_| ())
-            }
+            ExecutionAction::Open => self
+                .browser_launcher
+                .open_browser(
+                    &task.browser,
+                    task.url.as_deref(),
+                    task.browser_profile.as_deref(),
+                )
+                .await
+                .map(|_| ()),
             ExecutionAction::Close => {
                 if let Some(url) = &task.url {
                     self.browser_launcher
@@ -53,9 +52,7 @@ impl TaskExecutor {
                         .await
                 } else {
                     if task.allow_close_all {
-                        self.browser_launcher
-                            .close_browser(&task.browser)
-                            .await
+                        self.browser_launcher.close_browser(&task.browser).await
                     } else {
                         Err(crate::error::AppError::InvalidTask(
                             "Close without URL is blocked unless 'allow_close_all' is enabled for this task"
@@ -80,12 +77,14 @@ impl TaskExecutor {
                         ExecutionAction::Open => {
                             let next = self.calculate_next_execution(&task, task.start_time)?;
 
-                            let should_continue = self.should_continue_repeating(&task, next, repeat_config);
+                            let should_continue =
+                                self.should_continue_repeating(&task, next, repeat_config);
 
                             if should_continue {
                                 task.next_open_execution = Some(next);
                                 if let Some(close_time) = task.close_time {
-                                    let time_diff = close_time.signed_duration_since(task.start_time);
+                                    let time_diff =
+                                        close_time.signed_duration_since(task.start_time);
                                     task.next_close_execution = Some(next + time_diff);
                                 }
                                 task.status = TaskStatus::Active;
@@ -146,17 +145,20 @@ impl TaskExecutor {
         }
     }
 
-    fn calculate_next_execution(&self, task: &Task, base_time: chrono::DateTime<Utc>) -> Result<chrono::DateTime<Utc>> {
+    fn calculate_next_execution(
+        &self,
+        task: &Task,
+        base_time: chrono::DateTime<Utc>,
+    ) -> Result<chrono::DateTime<Utc>> {
         let repeat_config = task
             .repeat_config
             .as_ref()
             .expect("Task must have repeat config");
 
         // Parse timezone
-        let tz: Tz = task
-            .timezone
-            .parse()
-            .map_err(|_| crate::error::AppError::TimeParse(format!("Invalid timezone: {}", task.timezone)))?;
+        let tz: Tz = task.timezone.parse().map_err(|_| {
+            crate::error::AppError::TimeParse(format!("Invalid timezone: {}", task.timezone))
+        })?;
 
         // Convert base time to task's timezone
         let local_time = base_time.with_timezone(&tz);
@@ -175,28 +177,37 @@ impl TaskExecutor {
                     (month + 1, year)
                 };
 
-                let last_day_of_month = chrono::NaiveDate::from_ymd_opt(
-                    next_year,
-                    next_month + 1,
-                    1,
-                )
-                .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(next_year + 1, 1, 1).unwrap())
-                .pred_opt()
-                .unwrap()
-                .day();
+                let last_day_of_month =
+                    chrono::NaiveDate::from_ymd_opt(next_year, next_month + 1, 1)
+                        .unwrap_or_else(|| {
+                            chrono::NaiveDate::from_ymd_opt(next_year + 1, 1, 1).unwrap()
+                        })
+                        .pred_opt()
+                        .unwrap()
+                        .day();
 
                 let day = local_time.day().min(last_day_of_month);
 
                 let next_date = chrono::NaiveDate::from_ymd_opt(next_year, next_month, day)
-                    .ok_or_else(|| crate::error::AppError::TimeParse("Failed to calculate next month".to_string()))?;
+                    .ok_or_else(|| {
+                        crate::error::AppError::TimeParse(
+                            "Failed to calculate next month".to_string(),
+                        )
+                    })?;
 
                 let next_datetime = next_date
                     .and_hms_opt(local_time.hour(), local_time.minute(), local_time.second())
-                    .ok_or_else(|| crate::error::AppError::TimeParse("Failed to create next datetime".to_string()))?;
+                    .ok_or_else(|| {
+                        crate::error::AppError::TimeParse(
+                            "Failed to create next datetime".to_string(),
+                        )
+                    })?;
 
                 tz.from_local_datetime(&next_datetime)
                     .single()
-                    .ok_or_else(|| crate::error::AppError::TimeParse("Ambiguous local time".to_string()))?
+                    .ok_or_else(|| {
+                        crate::error::AppError::TimeParse("Ambiguous local time".to_string())
+                    })?
             }
         };
 
@@ -228,7 +239,8 @@ impl TaskExecutor {
         };
 
         // Send notification using tauri-plugin-notification
-        let _ = self.app_handle
+        let _ = self
+            .app_handle
             .notification()
             .builder()
             .title(format!("Task: {}", task.name))

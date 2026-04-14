@@ -1,8 +1,8 @@
 use crate::db::models::BrowserType;
 use crate::error::{AppError, Result};
-use crate::utils::validation::validate_browser_profile;
 #[cfg(target_os = "macos")]
 use crate::utils::validation::escape_applescript_string;
+use crate::utils::validation::validate_browser_profile;
 use std::process::{Child, Command};
 
 pub struct BrowserLauncher;
@@ -38,7 +38,12 @@ impl BrowserLauncher {
         Ok(pid)
     }
 
-    fn spawn_browser(&self, command: &str, args: &[String], browser: &BrowserType) -> Result<Option<Child>> {
+    fn spawn_browser(
+        &self,
+        command: &str,
+        args: &[String],
+        browser: &BrowserType,
+    ) -> Result<Option<Child>> {
         #[cfg(target_os = "windows")]
         {
             // On Windows, launch directly to get PID
@@ -151,21 +156,29 @@ impl BrowserLauncher {
                 .arg("-e")
                 .arg(&script)
                 .output()
-                .map_err(|e| AppError::Scheduler(format!("Failed to execute AppleScript: {}", e)))?;
+                .map_err(|e| {
+                    AppError::Scheduler(format!("Failed to execute AppleScript: {}", e))
+                })?;
 
             if output.status.success() {
                 println!("Successfully closed {} tab(s) with URL: {}", browser, url);
                 Ok(())
             } else {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(AppError::Scheduler(format!("AppleScript error: {}", stderr)))
+                Err(AppError::Scheduler(format!(
+                    "AppleScript error: {}",
+                    stderr
+                )))
             }
         }
 
         #[cfg(target_os = "linux")]
         {
             // Linux: fallback to closing all instances since we don't have easy tab control
-            println!("Linux: URL-based closing not supported, closing all {} instances", browser);
+            println!(
+                "Linux: URL-based closing not supported, closing all {} instances",
+                browser
+            );
             self.close_browser(browser).await
         }
     }
@@ -223,11 +236,16 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "windows")]
                 {
-                    self.find_browser_path_windows("chrome.exe", &[
-                        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-                        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-                    ])
-                    .ok_or_else(|| AppError::BrowserNotFound("Google Chrome executable not found".to_string()))?
+                    self.find_browser_path_windows(
+                        "chrome.exe",
+                        &[
+                            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                            "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+                        ],
+                    )
+                    .ok_or_else(|| {
+                        AppError::BrowserNotFound("Google Chrome executable not found".to_string())
+                    })?
                 }
 
                 #[cfg(target_os = "macos")]
@@ -254,11 +272,18 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "windows")]
                 {
-                    self.find_browser_path_windows("firefox.exe", &[
-                        "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
-                        "C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe",
-                    ])
-                    .ok_or_else(|| AppError::BrowserNotFound("Mozilla Firefox executable not found".to_string()))?
+                    self.find_browser_path_windows(
+                        "firefox.exe",
+                        &[
+                            "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+                            "C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe",
+                        ],
+                    )
+                    .ok_or_else(|| {
+                        AppError::BrowserNotFound(
+                            "Mozilla Firefox executable not found".to_string(),
+                        )
+                    })?
                 }
 
                 #[cfg(target_os = "macos")]
@@ -268,11 +293,8 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "linux")]
                 {
-                    self.find_browser_path(&[
-                        "/usr/bin/firefox",
-                        "/snap/bin/firefox",
-                    ])
-                    .unwrap_or_else(|| "firefox".to_string())
+                    self.find_browser_path(&["/usr/bin/firefox", "/snap/bin/firefox"])
+                        .unwrap_or_else(|| "firefox".to_string())
                 }
             }
             BrowserType::Edge => {
@@ -282,11 +304,16 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "windows")]
                 {
-                    self.find_browser_path_windows("msedge.exe", &[
-                        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-                        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-                    ])
-                    .ok_or_else(|| AppError::BrowserNotFound("Microsoft Edge executable not found".to_string()))?
+                    self.find_browser_path_windows(
+                        "msedge.exe",
+                        &[
+                            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+                            "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+                        ],
+                    )
+                    .ok_or_else(|| {
+                        AppError::BrowserNotFound("Microsoft Edge executable not found".to_string())
+                    })?
                 }
 
                 #[cfg(target_os = "macos")]
@@ -337,21 +364,23 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "linux")]
                 {
-                    self.find_browser_path(&[
-                        "/usr/bin/brave-browser",
-                        "/snap/bin/brave",
-                    ])
-                    .unwrap_or_else(|| "brave-browser".to_string())
+                    self.find_browser_path(&["/usr/bin/brave-browser", "/snap/bin/brave"])
+                        .unwrap_or_else(|| "brave-browser".to_string())
                 }
             }
             BrowserType::Opera => {
                 #[cfg(target_os = "windows")]
                 {
-                    self.find_browser_path_windows("launcher.exe", &[
-                        "C:\\Program Files\\Opera\\launcher.exe",
-                        "C:\\Program Files (x86)\\Opera\\launcher.exe",
-                    ])
-                    .ok_or_else(|| AppError::BrowserNotFound("Opera executable not found".to_string()))?
+                    self.find_browser_path_windows(
+                        "launcher.exe",
+                        &[
+                            "C:\\Program Files\\Opera\\launcher.exe",
+                            "C:\\Program Files (x86)\\Opera\\launcher.exe",
+                        ],
+                    )
+                    .ok_or_else(|| {
+                        AppError::BrowserNotFound("Opera executable not found".to_string())
+                    })?
                 }
 
                 #[cfg(target_os = "macos")]
@@ -361,11 +390,8 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "linux")]
                 {
-                    self.find_browser_path(&[
-                        "/usr/bin/opera",
-                        "/snap/bin/opera",
-                    ])
-                    .unwrap_or_else(|| "opera".to_string())
+                    self.find_browser_path(&["/usr/bin/opera", "/snap/bin/opera"])
+                        .unwrap_or_else(|| "opera".to_string())
                 }
             }
         };
@@ -417,9 +443,7 @@ impl BrowserLauncher {
                     "microsoft-edge".to_string()
                 }
             }
-            BrowserType::Safari => {
-                "Safari".to_string()
-            }
+            BrowserType::Safari => "Safari".to_string(),
             BrowserType::Brave => {
                 #[cfg(target_os = "windows")]
                 {
@@ -451,7 +475,7 @@ impl BrowserLauncher {
         }
     }
 
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(target_os = "linux")]
     fn find_browser_path(&self, paths: &[&str]) -> Option<String> {
         for path in paths {
             if std::path::Path::new(path).exists() {
@@ -465,15 +489,14 @@ impl BrowserLauncher {
     fn find_browser_path_windows(&self, exe_name: &str, paths: &[&str]) -> Option<String> {
         // Prefer absolute paths from the Windows registry App Paths key.
         // This avoids relying on the process search order (PATH / current directory).
-        self.query_windows_app_path(exe_name)
-            .or_else(|| {
-                for path in paths {
-                    if std::path::Path::new(path).exists() {
-                        return Some(path.to_string());
-                    }
+        self.query_windows_app_path(exe_name).or_else(|| {
+            for path in paths {
+                if std::path::Path::new(path).exists() {
+                    return Some(path.to_string());
                 }
-                None
-            })
+            }
+            None
+        })
     }
 
     #[cfg(target_os = "windows")]
@@ -525,16 +548,6 @@ impl BrowserLauncher {
         std::path::PathBuf::from(windows_dir)
             .join("System32")
             .join(exe_name)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    fn find_browser_path_windows(&self, _exe_name: &str, paths: &[&str]) -> Option<String> {
-        for path in paths {
-            if std::path::Path::new(path).exists() {
-                return Some(path.to_string());
-            }
-        }
-        None
     }
 }
 

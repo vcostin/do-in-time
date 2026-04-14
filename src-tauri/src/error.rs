@@ -12,6 +12,7 @@ pub enum AppError {
     TimeParse(String),
 
     #[error("Browser not found: {0}")]
+    #[allow(dead_code)]
     BrowserNotFound(String),
 
     #[error("Task not found: {0}")]

@@ -5,10 +5,12 @@ mod commands;
 mod core;
 mod db;
 mod error;
-mod utils;
 mod tray;
+mod utils;
 
-use commands::{browser_commands, scheduler_commands, task_commands, settings_commands, window_commands};
+use commands::{
+    browser_commands, scheduler_commands, settings_commands, task_commands, window_commands,
+};
 use core::TaskScheduler;
 use db::Database;
 
@@ -16,7 +18,10 @@ use db::Database;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec![])))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
         .setup(|app| {
             let app_handle = app.handle().clone();
 
@@ -29,10 +34,7 @@ pub fn run() {
                 );
 
                 // Load settings
-                let settings = db
-                    .get_settings()
-                    .await
-                    .expect("Failed to load settings");
+                let settings = db.get_settings().await.expect("Failed to load settings");
 
                 // Create system tray and store it to prevent destruction
                 let tray = tray::create_tray(&app_handle).expect("Failed to create system tray");

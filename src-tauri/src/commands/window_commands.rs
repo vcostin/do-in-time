@@ -3,7 +3,8 @@ use tauri_plugin_autostart::ManagerExt;
 
 #[tauri::command]
 pub async fn toggle_window_visibility(app: AppHandle) -> Result<(), String> {
-    let window = app.get_webview_window("main")
+    let window = app
+        .get_webview_window("main")
         .ok_or("Main window not found")?;
 
     if window.is_visible().map_err(|e| e.to_string())? {

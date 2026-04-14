@@ -1,11 +1,11 @@
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tokio::time::{sleep, Duration};
 use crate::core::task_executor::TaskExecutor;
 use crate::db::Database;
 use crate::error::{AppError, Result};
 use chrono::Utc;
+use std::sync::Arc;
 use tauri::AppHandle;
+use tokio::sync::RwLock;
+use tokio::time::{sleep, Duration};
 
 pub struct TaskScheduler {
     db: Arc<Database>,
@@ -59,7 +59,10 @@ impl TaskScheduler {
                                 };
 
                                 if let Err(e) = executor_clone.execute(task, action).await {
-                                    eprintln!("Failed to {} task '{}': {}", action_str, task_name, e);
+                                    eprintln!(
+                                        "Failed to {} task '{}': {}",
+                                        action_str, task_name, e
+                                    );
                                 }
                             } else {
                                 // Sleep until next action (with max 60 seconds interval)

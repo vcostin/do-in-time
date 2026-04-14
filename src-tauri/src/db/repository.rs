@@ -1,8 +1,8 @@
-use sqlx::Row;
-use crate::db::models::*;
 use crate::db::connection::Database;
+use crate::db::models::*;
 use crate::error::{AppError, Result};
-use crate::utils::validation::{validate_url, validate_browser_profile};
+use crate::utils::validation::{validate_browser_profile, validate_url};
+use sqlx::Row;
 use std::str::FromStr;
 
 impl Database {
@@ -25,7 +25,10 @@ impl Database {
 
         let repeat_interval = task.repeat_config.as_ref().map(|r| r.interval.to_string());
         let repeat_end_after = task.repeat_config.as_ref().and_then(|r| r.end_after);
-        let repeat_end_date = task.repeat_config.as_ref().and_then(|r| r.end_date.map(|d| d.to_rfc3339()));
+        let repeat_end_date = task
+            .repeat_config
+            .as_ref()
+            .and_then(|r| r.end_date.map(|d| d.to_rfc3339()));
 
         let result = sqlx::query(
             r#"
@@ -79,9 +82,7 @@ impl Database {
             .fetch_all(self.pool())
             .await?;
 
-        rows.into_iter()
-            .map(Self::row_to_task)
-            .collect()
+        rows.into_iter().map(Self::row_to_task).collect()
     }
 
     pub async fn get_next_action(&self) -> Result<Option<(Task, ExecutionAction)>> {
@@ -112,8 +113,8 @@ impl Database {
         match row {
             Some(r) => {
                 let action_str: String = r.try_get("next_action")?;
-                let action = ExecutionAction::from_str(&action_str)
-                    .map_err(|e| AppError::InvalidTask(e))?;
+                let action =
+                    ExecutionAction::from_str(&action_str).map_err(AppError::InvalidTask)?;
                 let task = Self::row_to_task(r)?;
                 Ok(Some((task, action)))
             }
@@ -134,8 +135,8 @@ impl Database {
         let old_task = self.get_task(id).await?;
 
         // Check if times have changed
-        let times_changed = old_task.start_time != task.start_time
-            || old_task.close_time != task.close_time;
+        let times_changed =
+            old_task.start_time != task.start_time || old_task.close_time != task.close_time;
 
         if times_changed {
             let now = chrono::Utc::now();
@@ -165,7 +166,10 @@ impl Database {
 
         let repeat_interval = task.repeat_config.as_ref().map(|r| r.interval.to_string());
         let repeat_end_after = task.repeat_config.as_ref().and_then(|r| r.end_after);
-        let repeat_end_date = task.repeat_config.as_ref().and_then(|r| r.end_date.map(|d| d.to_rfc3339()));
+        let repeat_end_date = task
+            .repeat_config
+            .as_ref()
+            .and_then(|r| r.end_date.map(|d| d.to_rfc3339()));
 
         sqlx::query(
             r#"
@@ -211,11 +215,14 @@ impl Database {
     }
 
     fn row_to_task(row: sqlx::sqlite::SqliteRow) -> Result<Task> {
-        let repeat_config = if let Some(interval_str) = row.get::<Option<String>, _>("repeat_interval") {
+        let repeat_config = if let Some(interval_str) =
+            row.get::<Option<String>, _>("repeat_interval")
+        {
             Some(RepeatConfig {
-                interval: RepeatInterval::from_str(&interval_str).map_err(|e| AppError::InvalidTask(e))?,
+                interval: RepeatInterval::from_str(&interval_str).map_err(AppError::InvalidTask)?,
                 end_after: row.get("repeat_end_after"),
-                end_date: row.get::<Option<String>, _>("repeat_end_date")
+                end_date: row
+                    .get::<Option<String>, _>("repeat_end_date")
                     .and_then(|s| s.parse().ok()),
             })
         } else {
@@ -225,18 +232,29 @@ impl Database {
         Ok(Task {
             id: Some(row.get("id")),
             name: row.get("name"),
-            browser: BrowserType::from_str(&row.get::<String, _>("browser")).map_err(|e| AppError::InvalidTask(e))?,
+            browser: BrowserType::from_str(&row.get::<String, _>("browser"))
+                .map_err(AppError::InvalidTask)?,
             browser_profile: row.get("browser_profile"),
             url: row.get("url"),
             allow_close_all: row.get("allow_close_all"),
-            start_time: row.get::<String, _>("start_time").parse().map_err(|e| AppError::TimeParse(format!("{}", e)))?,
-            close_time: row.get::<Option<String>, _>("close_time").and_then(|s| s.parse().ok()),
+            start_time: row
+                .get::<String, _>("start_time")
+                .parse()
+                .map_err(|e| AppError::TimeParse(format!("{}", e)))?,
+            close_time: row
+                .get::<Option<String>, _>("close_time")
+                .and_then(|s| s.parse().ok()),
             timezone: row.get("timezone"),
             repeat_config,
             execution_count: row.get("execution_count"),
-            status: TaskStatus::from_str(&row.get::<String, _>("status")).map_err(|e| AppError::InvalidTask(e))?,
-            next_open_execution: row.get::<Option<String>, _>("next_open_execution").and_then(|s| s.parse().ok()),
-            next_close_execution: row.get::<Option<String>, _>("next_close_execution").and_then(|s| s.parse().ok()),
+            status: TaskStatus::from_str(&row.get::<String, _>("status"))
+                .map_err(AppError::InvalidTask)?,
+            next_open_execution: row
+                .get::<Option<String>, _>("next_open_execution")
+                .and_then(|s| s.parse().ok()),
+            next_close_execution: row
+                .get::<Option<String>, _>("next_close_execution")
+                .and_then(|s| s.parse().ok()),
         })
     }
 
@@ -277,10 +295,14 @@ impl Database {
     }
 
     pub async fn update_settings(&self, settings: AppSettings) -> Result<()> {
-        self.update_setting("minimize_to_tray", settings.minimize_to_tray).await?;
-        self.update_setting("start_minimized", settings.start_minimized).await?;
-        self.update_setting("show_notifications", settings.show_notifications).await?;
-        self.update_setting("auto_start", settings.auto_start).await?;
+        self.update_setting("minimize_to_tray", settings.minimize_to_tray)
+            .await?;
+        self.update_setting("start_minimized", settings.start_minimized)
+            .await?;
+        self.update_setting("show_notifications", settings.show_notifications)
+            .await?;
+        self.update_setting("auto_start", settings.auto_start)
+            .await?;
         Ok(())
     }
 }

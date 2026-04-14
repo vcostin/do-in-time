@@ -62,10 +62,7 @@ fn check_registry_browsers() -> Vec<BrowserType> {
 
     // Query registry for StartMenuInternet entries
     let output = Command::new(system32_exe("reg.exe"))
-        .args(&[
-            "query",
-            "HKLM\\SOFTWARE\\Clients\\StartMenuInternet",
-        ])
+        .args(&["query", "HKLM\\SOFTWARE\\Clients\\StartMenuInternet"])
         .output();
 
     if let Ok(output) = output {
@@ -95,14 +92,17 @@ fn check_registry_browsers() -> Vec<BrowserType> {
 fn check_chrome_installed() -> bool {
     // Check common paths and registry App Paths
     std::path::Path::new("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe").exists()
-        || std::path::Path::new("C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe").exists()
+        || std::path::Path::new("C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe")
+            .exists()
         || check_app_path("chrome.exe")
 }
 
 #[cfg(target_os = "windows")]
 fn check_edge_installed() -> bool {
-    std::path::Path::new("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe").exists()
-        || std::path::Path::new("C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe").exists()
+    std::path::Path::new("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe")
+        .exists()
+        || std::path::Path::new("C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe")
+            .exists()
         || check_app_path("msedge.exe")
 }
 
@@ -115,8 +115,12 @@ fn check_firefox_installed() -> bool {
 
 #[cfg(target_os = "windows")]
 fn check_brave_installed() -> bool {
-    std::path::Path::new("C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe").exists()
-        || std::path::Path::new("C:\\Program Files (x86)\\BraveSoftware\\Brave-Browser\\Application\\brave.exe").exists()
+    std::path::Path::new("C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe")
+        .exists()
+        || std::path::Path::new(
+            "C:\\Program Files (x86)\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+        )
+        .exists()
         || check_app_path("brave.exe")
 }
 
@@ -133,7 +137,10 @@ fn check_app_path(exe_name: &str) -> bool {
     let output = Command::new(system32_exe("reg.exe"))
         .args(&[
             "query",
-            &format!("HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{}", exe_name),
+            &format!(
+                "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{}",
+                exe_name
+            ),
             "/ve",
         ])
         .output();
@@ -189,7 +196,7 @@ pub fn get_installed_browsers() -> Vec<BrowserType> {
 
     // Method 1: Use mdfind (Spotlight) to search for browser apps
     let output = Command::new("mdfind")
-        .args(&["kMDItemKind == 'Application'"])
+        .args(["kMDItemKind == 'Application'"])
         .output();
 
     if let Ok(output) = output {
@@ -213,23 +220,33 @@ pub fn get_installed_browsers() -> Vec<BrowserType> {
     }
 
     // Method 2: Fallback to standard paths
-    if !browsers.contains(&BrowserType::Chrome) && std::path::Path::new("/Applications/Google Chrome.app").exists() {
+    if !browsers.contains(&BrowserType::Chrome)
+        && std::path::Path::new("/Applications/Google Chrome.app").exists()
+    {
         browsers.push(BrowserType::Chrome);
     }
 
-    if !browsers.contains(&BrowserType::Firefox) && std::path::Path::new("/Applications/Firefox.app").exists() {
+    if !browsers.contains(&BrowserType::Firefox)
+        && std::path::Path::new("/Applications/Firefox.app").exists()
+    {
         browsers.push(BrowserType::Firefox);
     }
 
-    if !browsers.contains(&BrowserType::Safari) && std::path::Path::new("/Applications/Safari.app").exists() {
+    if !browsers.contains(&BrowserType::Safari)
+        && std::path::Path::new("/Applications/Safari.app").exists()
+    {
         browsers.push(BrowserType::Safari);
     }
 
-    if !browsers.contains(&BrowserType::Brave) && std::path::Path::new("/Applications/Brave Browser.app").exists() {
+    if !browsers.contains(&BrowserType::Brave)
+        && std::path::Path::new("/Applications/Brave Browser.app").exists()
+    {
         browsers.push(BrowserType::Brave);
     }
 
-    if !browsers.contains(&BrowserType::Opera) && std::path::Path::new("/Applications/Opera.app").exists() {
+    if !browsers.contains(&BrowserType::Opera)
+        && std::path::Path::new("/Applications/Opera.app").exists()
+    {
         browsers.push(BrowserType::Opera);
     }
 
@@ -273,7 +290,11 @@ pub fn get_installed_browsers() -> Vec<BrowserType> {
 #[cfg(target_os = "macos")]
 pub fn get_default_browser() -> Option<BrowserType> {
     let output = Command::new("defaults")
-        .args(&["read", "com.apple.LaunchServices/com.apple.launchservices.secure", "LSHandlers"])
+        .args([
+            "read",
+            "com.apple.LaunchServices/com.apple.launchservices.secure",
+            "LSHandlers",
+        ])
         .output();
 
     if let Ok(output) = output {
@@ -303,7 +324,10 @@ pub fn get_installed_browsers() -> Vec<BrowserType> {
     let desktop_paths = vec![
         "/usr/share/applications",
         "/usr/local/share/applications",
-        format!("{}/.local/share/applications", std::env::var("HOME").unwrap_or_default()),
+        format!(
+            "{}/.local/share/applications",
+            std::env::var("HOME").unwrap_or_default()
+        ),
     ];
 
     for desktop_dir in desktop_paths {
@@ -313,17 +337,21 @@ pub fn get_installed_browsers() -> Vec<BrowserType> {
                     let filename_lower = filename.to_lowercase();
 
                     if !browsers.contains(&BrowserType::Chrome)
-                        && (filename_lower.contains("google-chrome") || filename_lower.contains("chrome.desktop"))
+                        && (filename_lower.contains("google-chrome")
+                            || filename_lower.contains("chrome.desktop"))
                     {
                         browsers.push(BrowserType::Chrome);
                     }
 
-                    if !browsers.contains(&BrowserType::Firefox) && filename_lower.contains("firefox") {
+                    if !browsers.contains(&BrowserType::Firefox)
+                        && filename_lower.contains("firefox")
+                    {
                         browsers.push(BrowserType::Firefox);
                     }
 
                     if !browsers.contains(&BrowserType::Brave)
-                        && (filename_lower.contains("brave") || filename_lower.contains("brave-browser"))
+                        && (filename_lower.contains("brave")
+                            || filename_lower.contains("brave-browser"))
                     {
                         browsers.push(BrowserType::Brave);
                     }

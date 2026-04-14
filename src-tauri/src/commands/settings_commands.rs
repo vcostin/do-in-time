@@ -1,12 +1,10 @@
+use crate::db::{AppSettings, Database};
 use std::sync::Arc;
 use tauri::State;
-use crate::db::{Database, AppSettings};
 
 #[tauri::command]
 pub async fn get_settings(db: State<'_, Arc<Database>>) -> Result<AppSettings, String> {
-    db.get_settings()
-        .await
-        .map_err(|e| e.to_string())
+    db.get_settings().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
