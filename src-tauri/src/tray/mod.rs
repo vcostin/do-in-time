@@ -1,20 +1,20 @@
 use tauri::{
-    AppHandle, Manager, Emitter,
     menu::{Menu, MenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState, TrayIcon},
+    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager,
 };
 
 // Helper function to create menu
 fn create_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
-    let toggle_window = MenuItem::with_id(app, "toggle_window", "Toggle Window", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
+    let toggle_window =
+        MenuItem::with_id(app, "toggle_window", "Toggle Window", true, None::<&str>)
+            .map_err(|e| e.to_string())?;
     let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)
         .map_err(|e| e.to_string())?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
+    let quit =
+        MenuItem::with_id(app, "quit", "Quit", true, None::<&str>).map_err(|e| e.to_string())?;
 
-    Menu::with_items(app, &[&toggle_window, &settings, &quit])
-        .map_err(|e| e.to_string())
+    Menu::with_items(app, &[&toggle_window, &settings, &quit]).map_err(|e| e.to_string())
 }
 
 pub fn create_tray(app: &AppHandle) -> Result<TrayIcon<tauri::Wry>, String> {
@@ -28,7 +28,7 @@ pub fn create_tray(app: &AppHandle) -> Result<TrayIcon<tauri::Wry>, String> {
         .icon(icon)
         .tooltip("Browser Scheduler")
         .menu(&menu)
-        .show_menu_on_left_click(false)  // Only show menu on right-click
+        .show_menu_on_left_click(false) // Only show menu on right-click
         .on_menu_event(move |app, event| {
             match event.id.as_ref() {
                 "toggle_window" => {
@@ -65,27 +65,25 @@ pub fn create_tray(app: &AppHandle) -> Result<TrayIcon<tauri::Wry>, String> {
         })
         .on_tray_icon_event(|tray, event| {
             let app = tray.app_handle();
-            match event {
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
-                } => {
-                    // Left-click: toggle window visibility
-                    if let Some(window) = app.get_webview_window("main") {
-                        match window.is_visible() {
-                            Ok(true) => {
-                                let _ = window.hide();
-                            }
-                            Ok(false) | Err(_) => {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                                let _ = window.unminimize();
-                            }
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                // Left-click: toggle window visibility
+                if let Some(window) = app.get_webview_window("main") {
+                    match window.is_visible() {
+                        Ok(true) => {
+                            let _ = window.hide();
+                        }
+                        Ok(false) | Err(_) => {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.unminimize();
                         }
                     }
                 }
-                _ => {}
             }
         })
         .build(app)

@@ -1,6 +1,6 @@
+use crate::error::Result;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::str::FromStr;
-use crate::error::Result;
 
 pub struct Database {
     pool: SqlitePool,
@@ -17,8 +17,7 @@ impl Database {
 
         let connection_string = format!("sqlite://{}?mode=rwc", db_path.display());
 
-        let options = SqliteConnectOptions::from_str(&connection_string)?
-            .create_if_missing(true);
+        let options = SqliteConnectOptions::from_str(&connection_string)?.create_if_missing(true);
 
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
@@ -46,8 +45,7 @@ impl Database {
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
         } else {
             // Linux
-            dirs::data_local_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
+            dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."))
         };
 
         Ok(data_dir.join("do-in-time").join("data.db"))
