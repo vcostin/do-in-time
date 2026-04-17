@@ -81,6 +81,39 @@ impl BrowserLauncher {
 
         #[cfg(target_os = "linux")]
         {
+            let has_display = std::env::var("DISPLAY").is_ok()
+                || std::env::var("WAYLAND_DISPLAY").is_ok();
+
+            if !has_display {
+                let xvfb_available = Command::new("which")
+                    .arg("xvfb-run")
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false);
+
+                if xvfb_available {
+                    println!("No display detected, launching {} via xvfb-run", browser);
+                    let mut cmd = Command::new("xvfb-run");
+                    cmd.arg("-a"); // auto-assign a free display number
+                    cmd.arg(command);
+                    for arg in args {
+                        cmd.arg(arg);
+                    }
+                    let child = cmd.spawn().map_err(|e| {
+                        AppError::Scheduler(format!(
+                            "Failed to launch {} with xvfb-run: {}",
+                            browser, e
+                        ))
+                    })?;
+                    return Ok(Some(child));
+                } else {
+                    println!(
+                        "⚠ No display detected and xvfb-run not found. \
+                        Install with: sudo apt install xvfb"
+                    );
+                }
+            }
+
             let mut cmd = Command::new(command);
             for arg in args {
                 cmd.arg(arg);
@@ -140,6 +173,7 @@ impl BrowserLauncher {
                 BrowserType::Safari => "Safari",
                 BrowserType::Brave => "Brave Browser",
                 BrowserType::Opera => "Opera",
+                BrowserType::Chromium => "Chromium",
             };
 
             // Sanitize URL to prevent AppleScript injection
@@ -394,6 +428,29 @@ impl BrowserLauncher {
                         .unwrap_or_else(|| "opera".to_string())
                 }
             }
+            BrowserType::Chromium => {
+                #[cfg(target_os = "windows")]
+                {
+                    return Err(AppError::BrowserNotFound(
+                        "Chromium is not supported on Windows. Use Chrome instead.".to_string(),
+                    ));
+                }
+
+                #[cfg(target_os = "macos")]
+                {
+                    "Chromium".to_string()
+                }
+
+                #[cfg(target_os = "linux")]
+                {
+                    self.find_browser_path(&[
+                        "/usr/bin/chromium-browser",
+                        "/usr/bin/chromium",
+                        "/snap/bin/chromium",
+                    ])
+                    .unwrap_or_else(|| "chromium-browser".to_string())
+                }
+            }
         };
 
         Ok((command, args))
@@ -470,6 +527,20 @@ impl BrowserLauncher {
                 #[cfg(target_os = "linux")]
                 {
                     "opera".to_string()
+                }
+            }
+            BrowserType::Chromium => {
+                #[cfg(target_os = "windows")]
+                {
+                    "chromium.exe".to_string()
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    "Chromium".to_string()
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    "chromium-browser".to_string()
                 }
             }
         }

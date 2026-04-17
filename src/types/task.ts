@@ -5,6 +5,7 @@ export enum BrowserType {
   Safari = 'safari',
   Brave = 'brave',
   Opera = 'opera',
+  Chromium = 'chromium',
 }
 
 export enum TaskStatus {

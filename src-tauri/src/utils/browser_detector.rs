@@ -322,8 +322,8 @@ pub fn get_installed_browsers() -> Vec<BrowserType> {
 
     // Method 1: Check for .desktop files in XDG standard locations
     let desktop_paths = vec![
-        "/usr/share/applications",
-        "/usr/local/share/applications",
+        "/usr/share/applications".to_string(),
+        "/usr/local/share/applications".to_string(),
         format!(
             "{}/.local/share/applications",
             std::env::var("HOME").unwrap_or_default()
@@ -341,6 +341,13 @@ pub fn get_installed_browsers() -> Vec<BrowserType> {
                             || filename_lower.contains("chrome.desktop"))
                     {
                         browsers.push(BrowserType::Chrome);
+                    }
+
+                    if !browsers.contains(&BrowserType::Chromium)
+                        && (filename_lower == "chromium.desktop"
+                            || filename_lower == "chromium-browser.desktop")
+                    {
+                        browsers.push(BrowserType::Chromium);
                     }
 
                     if !browsers.contains(&BrowserType::Firefox)
@@ -424,6 +431,25 @@ pub fn get_installed_browsers() -> Vec<BrowserType> {
         }
     }
 
+    if !browsers.contains(&BrowserType::Chromium) {
+        let found = Command::new("which")
+            .arg("chromium-browser")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+            || Command::new("which")
+                .arg("chromium")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+            || std::path::Path::new("/usr/bin/chromium-browser").exists()
+            || std::path::Path::new("/usr/bin/chromium").exists()
+            || std::path::Path::new("/snap/bin/chromium").exists();
+        if found {
+            browsers.push(BrowserType::Chromium);
+        }
+    }
+
     browsers.dedup();
     browsers
 }
@@ -437,7 +463,9 @@ pub fn get_default_browser() -> Option<BrowserType> {
     if let Ok(output) = output {
         let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
 
-        if stdout.contains("chrome") {
+        if stdout.contains("chromium") {
+            return Some(BrowserType::Chromium);
+        } else if stdout.contains("chrome") {
             return Some(BrowserType::Chrome);
         } else if stdout.contains("firefox") {
             return Some(BrowserType::Firefox);
