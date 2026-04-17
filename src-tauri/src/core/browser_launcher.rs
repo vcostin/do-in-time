@@ -94,11 +94,14 @@ impl BrowserLauncher {
                 if xvfb_available {
                     println!("No display detected, launching {} via xvfb-run", browser);
                     let mut cmd = Command::new("xvfb-run");
-                    cmd.arg("-a"); // auto-assign a free display number
+                    cmd.arg("-a");
                     cmd.arg(command);
                     for arg in args {
                         cmd.arg(arg);
                     }
+                    cmd.env_remove("WEBKIT_EXEC_PATH")
+                        .env_remove("WEBKIT_INJECTED_BUNDLE_PATH")
+                        .env_remove("JSC_ARGS");
                     let child = cmd.spawn().map_err(|e| {
                         AppError::Scheduler(format!(
                             "Failed to launch {} with xvfb-run: {}",
@@ -118,6 +121,11 @@ impl BrowserLauncher {
             for arg in args {
                 cmd.arg(arg);
             }
+            // Strip WebKitGTK env vars that leak into child processes and cause
+            // unrecognized flag errors in Chromium
+            cmd.env_remove("WEBKIT_EXEC_PATH")
+                .env_remove("WEBKIT_INJECTED_BUNDLE_PATH")
+                .env_remove("JSC_ARGS");
 
             let child = cmd
                 .spawn()
@@ -243,6 +251,7 @@ impl BrowserLauncher {
         #[cfg(target_os = "linux")]
         {
             Command::new("pkill")
+                .arg("-f")
                 .arg(&process_name)
                 .spawn()
                 .map_err(|e| AppError::Scheduler(format!("Failed to close {}: {}", browser, e)))?;
