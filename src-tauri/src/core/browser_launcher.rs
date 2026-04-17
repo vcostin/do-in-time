@@ -208,6 +208,7 @@ impl BrowserLauncher {
 
         #[cfg(target_os = "linux")]
         {
+            let _ = url;
             // Linux: fallback to closing all instances since we don't have easy tab control
             println!(
                 "Linux: URL-based closing not supported, closing all {} instances",
