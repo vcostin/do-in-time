@@ -310,6 +310,9 @@ If you encounter database errors:
 2. Delete the database file (see Database Location above)
 3. Restart the application (fresh database will be created)
 
+### Tray restore: title-bar buttons unclickable (Linux / KDE)
+After hiding to the tray and showing again, minimize / maximize / close can stop responding until you double-click the title bar. This is a known Tauri + Wayland decoration bug; the app toggles window `resizable` on show/focus as a workaround. If it still happens, try launching under X11 (`GDK_BACKEND=x11`) or update Tauri when upstream fixes land.
+
 ## Credits
 
 Built with assistance from Claude (Anthropic's AI assistant) for code implementation and security hardening.

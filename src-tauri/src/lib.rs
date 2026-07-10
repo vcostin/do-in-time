@@ -7,6 +7,7 @@ mod db;
 mod error;
 mod tray;
 mod utils;
+mod window_util;
 
 use commands::{
     browser_commands, scheduler_commands, settings_commands, task_commands, window_commands,
@@ -59,6 +60,18 @@ pub fn run() {
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.hide();
                     }
+                }
+
+                // Linux/Wayland: refresh decorations whenever the window gains focus
+                // after tray hide/show (covers paths that only call show/focus).
+                #[cfg(target_os = "linux")]
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let window_for_event = window.clone();
+                    window.on_window_event(move |event| {
+                        if let tauri::WindowEvent::Focused(true) = event {
+                            window_util::refresh_window_decorations(&window_for_event);
+                        }
+                    });
                 }
             });
 

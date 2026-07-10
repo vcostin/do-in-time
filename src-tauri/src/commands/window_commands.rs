@@ -1,3 +1,4 @@
+use crate::window_util;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
@@ -10,8 +11,7 @@ pub async fn toggle_window_visibility(app: AppHandle) -> Result<(), String> {
     if window.is_visible().map_err(|e| e.to_string())? {
         window.hide().map_err(|e| e.to_string())?;
     } else {
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
+        window_util::show_main_window(&window);
     }
 
     Ok(())

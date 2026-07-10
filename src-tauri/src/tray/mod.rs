@@ -4,6 +4,8 @@ use tauri::{
     AppHandle, Emitter, Manager,
 };
 
+use crate::window_util;
+
 // Helper function to create menu
 fn create_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
     let toggle_window =
@@ -15,6 +17,19 @@ fn create_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
         MenuItem::with_id(app, "quit", "Quit", true, None::<&str>).map_err(|e| e.to_string())?;
 
     Menu::with_items(app, &[&toggle_window, &settings, &quit]).map_err(|e| e.to_string())
+}
+
+fn toggle_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        match window.is_visible() {
+            Ok(true) => {
+                let _ = window.hide();
+            }
+            Ok(false) | Err(_) => {
+                window_util::show_main_window(&window);
+            }
+        }
+    }
 }
 
 pub fn create_tray(app: &AppHandle) -> Result<TrayIcon<tauri::Wry>, String> {
@@ -32,19 +47,7 @@ pub fn create_tray(app: &AppHandle) -> Result<TrayIcon<tauri::Wry>, String> {
         .on_menu_event(move |app, event| {
             match event.id.as_ref() {
                 "toggle_window" => {
-                    // Toggle window visibility
-                    if let Some(window) = app.get_webview_window("main") {
-                        match window.is_visible() {
-                            Ok(true) => {
-                                let _ = window.hide();
-                            }
-                            Ok(false) | Err(_) => {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                                let _ = window.unminimize();
-                            }
-                        }
-                    }
+                    toggle_main_window(app);
                 }
                 "settings" => {
                     // Emit event to frontend to open settings modal
@@ -52,9 +55,7 @@ pub fn create_tray(app: &AppHandle) -> Result<TrayIcon<tauri::Wry>, String> {
 
                     // Also show the window to display the settings
                     if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                        let _ = window.unminimize();
+                        window_util::show_main_window(&window);
                     }
                 }
                 "quit" => {
@@ -71,19 +72,7 @@ pub fn create_tray(app: &AppHandle) -> Result<TrayIcon<tauri::Wry>, String> {
                 ..
             } = event
             {
-                // Left-click: toggle window visibility
-                if let Some(window) = app.get_webview_window("main") {
-                    match window.is_visible() {
-                        Ok(true) => {
-                            let _ = window.hide();
-                        }
-                        Ok(false) | Err(_) => {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                            let _ = window.unminimize();
-                        }
-                    }
-                }
+                toggle_main_window(app);
             }
         })
         .build(app)
