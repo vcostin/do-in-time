@@ -239,9 +239,20 @@ Schema upgrades run on startup via `schema_migrations` (for example adding `last
 
 ## Database Location
 
-- **Windows**: `%APPDATA%\do-in-time\data.db`
-- **macOS**: `~/Library/Application Support/do-in-time/data.db`
-- **Linux**: `~/.local/share/do-in-time/data.db`
+Release builds and debug/`tauri dev` builds use **separate** SQLite files in the same app data directory:
+
+| Build | Filename |
+|-------|----------|
+| Release | `data.db` |
+| Debug / `tauri dev` | `dev-data.db` |
+
+Directories:
+
+- **Windows**: `%APPDATA%\do-in-time\`
+- **macOS**: `~/Library/Application Support/do-in-time/`
+- **Linux**: `~/.local/share/do-in-time/`
+
+Example (Linux): `~/.local/share/do-in-time/data.db` (release) vs `~/.local/share/do-in-time/dev-data.db` (dev).
 
 ## Development
 

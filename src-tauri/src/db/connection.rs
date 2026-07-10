@@ -48,6 +48,14 @@ impl Database {
             dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."))
         };
 
-        Ok(data_dir.join("do-in-time").join("data.db"))
+        // Keep debug/dev runs off the release database so local testing cannot
+        // clobber a populated production file.
+        let filename = if cfg!(debug_assertions) {
+            "dev-data.db"
+        } else {
+            "data.db"
+        };
+
+        Ok(data_dir.join("do-in-time").join(filename))
     }
 }

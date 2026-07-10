@@ -219,6 +219,23 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 **Acceptance:**
 - README troubleshooting matches real failure modes users hit on each OS
 
+### Nuke / hard-reset database
+
+**Status:** `planned`  
+**Priority:** very low — nice-to-have; may not be worth shipping  
+**Today:** Resetting means quitting the app and deleting `data.db` / `dev-data.db` by hand (see README).
+
+**Idea (if ever):**
+- Settings control: “Reset all data” / nuke DB with a strong confirmation (type-to-confirm or similar)
+- Drop or recreate the SQLite file, re-run schema init, refresh UI to empty state
+- Possibly offer “reset this build’s DB only” so release and `dev-data.db` stay independent
+
+**Open question:** Whether an in-app nuke is safer than documenting file delete, or just a footgun for accidental wipes.
+
+**Acceptance (if built):**
+- User can wipe tasks/logs/settings for the current DB without hunting the filesystem
+- Accidental reset is hard; release vs debug DB are not confused
+
 ---
 
 ## Notes
@@ -226,4 +243,4 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
 - **Close (Win/Linux tab):** remains `on-hold` — no clear resolve yet (CDP / extension / native messaging still undecided). Ship safer scoping and soft close-miss handling when useful; do not promise true tab close until a path is chosen.
-- **Next iteration priority (suggested):** reschedule-on-repeat-edit → tests → UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish.
+- **Next iteration priority (suggested):** reschedule-on-repeat-edit → tests → UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. **Nuke DB** is backlog-only, very low priority.
