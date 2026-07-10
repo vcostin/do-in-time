@@ -67,6 +67,16 @@ export interface TaskExecutionLogEntry {
   created_at: string;
 }
 
+export interface RecentExecutionLogEntry {
+  id: number;
+  task_id: number;
+  task_name: string;
+  action: string;
+  success: boolean;
+  message?: string | null;
+  created_at: string;
+}
+
 export interface SchedulerStatus {
   running: boolean;
 }

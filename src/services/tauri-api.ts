@@ -4,6 +4,7 @@ import {
   SchedulerStatus,
   AppSettings,
   TaskExecutionLogEntry,
+  RecentExecutionLogEntry,
 } from '../types/task';
 
 export class TauriTaskService {
@@ -36,6 +37,16 @@ export class TauriTaskService {
     limit = 20,
   ): Promise<TaskExecutionLogEntry[]> {
     return invoke<TaskExecutionLogEntry[]>('get_task_execution_log', { id, limit });
+  }
+
+  static async getRecentExecutionLog(
+    limit = 50,
+    failuresOnly = false,
+  ): Promise<RecentExecutionLogEntry[]> {
+    return invoke<RecentExecutionLogEntry[]>('get_recent_execution_log', {
+      limit,
+      failuresOnly,
+    });
   }
 
   static async startScheduler(): Promise<void> {

@@ -1,4 +1,4 @@
-use crate::db::{Database, Task, TaskExecutionLogEntry};
+use crate::db::{Database, RecentExecutionLogEntry, Task, TaskExecutionLogEntry};
 use std::sync::Arc;
 use tauri::State;
 
@@ -49,6 +49,17 @@ pub async fn get_task_execution_log(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<TaskExecutionLogEntry>, String> {
     db.get_task_execution_log(id, limit.unwrap_or(20))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_recent_execution_log(
+    limit: Option<i64>,
+    failures_only: Option<bool>,
+    db: State<'_, Arc<Database>>,
+) -> Result<Vec<RecentExecutionLogEntry>, String> {
+    db.get_recent_execution_log(limit.unwrap_or(50), failures_only.unwrap_or(false))
         .await
         .map_err(|e| e.to_string())
 }

@@ -30,6 +30,7 @@ A cross-platform desktop application for scheduling browsers to open and close a
 - **Automatic Scheduling**: Background scheduler runs automatically on startup
 - **Task Status**: Monitor tasks (Active, Completed, Failed, Disabled)
 - **Failure logging**: Last error on the task card plus a recent execution log
+- **Activity feed**: Cross-task open/close history (with failures-only filter)
 - **Pause / Retry**: Pause active tasks; resume disabled or retry failed without deleting
 
 ### 🎨 Modern UI
@@ -156,7 +157,8 @@ deno task dev
 - **Edit**: Click the "Edit" button on any task
 - **Delete**: Click "Delete" to remove a task
 - **Pause / Resume / Retry**: Pause active tasks; resume disabled ones or retry after a failure
-- **Log**: Expand recent open/close attempts and error messages
+- **Log**: Expand recent open/close attempts and error messages on a task
+- **Activity**: Header button opens a cross-task activity feed (optional failures-only filter)
 - **Status**: Tasks show real-time status (Active, Completed, Failed, Disabled)
 
 ### Scheduler Control

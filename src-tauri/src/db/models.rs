@@ -35,6 +35,17 @@ pub struct TaskExecutionLogEntry {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentExecutionLogEntry {
+    pub id: i64,
+    pub task_id: i64,
+    pub task_name: String,
+    pub action: String,
+    pub success: bool,
+    pub message: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum BrowserType {

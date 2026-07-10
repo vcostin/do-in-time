@@ -297,6 +297,59 @@ impl Database {
             .collect()
     }
 
+    pub async fn get_recent_execution_log(
+        &self,
+        limit: i64,
+        failures_only: bool,
+    ) -> Result<Vec<RecentExecutionLogEntry>> {
+        let limit = limit.clamp(1, 200);
+        let rows = if failures_only {
+            sqlx::query(
+                r#"
+                SELECT l.id, l.task_id, t.name AS task_name, l.action, l.success, l.message, l.created_at
+                FROM task_execution_log l
+                INNER JOIN tasks t ON t.id = l.task_id
+                WHERE l.success = 0
+                ORDER BY l.created_at DESC, l.id DESC
+                LIMIT ?
+                "#,
+            )
+            .bind(limit)
+            .fetch_all(self.pool())
+            .await?
+        } else {
+            sqlx::query(
+                r#"
+                SELECT l.id, l.task_id, t.name AS task_name, l.action, l.success, l.message, l.created_at
+                FROM task_execution_log l
+                INNER JOIN tasks t ON t.id = l.task_id
+                ORDER BY l.created_at DESC, l.id DESC
+                LIMIT ?
+                "#,
+            )
+            .bind(limit)
+            .fetch_all(self.pool())
+            .await?
+        };
+
+        rows.into_iter()
+            .map(|row| {
+                Ok(RecentExecutionLogEntry {
+                    id: row.get("id"),
+                    task_id: row.get("task_id"),
+                    task_name: row.get("task_name"),
+                    action: row.get("action"),
+                    success: row.get("success"),
+                    message: row.get("message"),
+                    created_at: row
+                        .get::<String, _>("created_at")
+                        .parse()
+                        .map_err(|e| AppError::TimeParse(format!("{}", e)))?,
+                })
+            })
+            .collect()
+    }
+
     pub async fn delete_task(&self, id: i64) -> Result<()> {
         sqlx::query("DELETE FROM tasks WHERE id = ?")
             .bind(id)

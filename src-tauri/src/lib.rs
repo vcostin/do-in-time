@@ -92,6 +92,7 @@ pub fn run() {
             task_commands::delete_task,
             task_commands::set_task_paused,
             task_commands::get_task_execution_log,
+            task_commands::get_recent_execution_log,
             scheduler_commands::start_scheduler,
             scheduler_commands::stop_scheduler,
             scheduler_commands::get_scheduler_status,

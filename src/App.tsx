@@ -6,6 +6,7 @@ import { TaskForm } from './components/TaskForm';
 import { TaskList } from './components/TaskList';
 import { SchedulerStatus } from './components/SchedulerStatus';
 import { SettingsModal } from './components/SettingsModal';
+import { ActivityModal } from './components/ActivityModal';
 import { Task } from './types/task';
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
 
   const handleCreateOrUpdate = async (task: Task) => {
     try {
@@ -91,6 +93,13 @@ function App() {
             </div>
             <div className="flex items-center gap-3">
               <button
+                onClick={() => setShowActivity(true)}
+                className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                title="Activity across all tasks"
+              >
+                Activity
+              </button>
+              <button
                 onClick={() => setShowSettings(true)}
                 className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 title="Settings"
@@ -150,6 +159,10 @@ function App() {
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+      />
+      <ActivityModal
+        isOpen={showActivity}
+        onClose={() => setShowActivity(false)}
       />
     </div>
   );
