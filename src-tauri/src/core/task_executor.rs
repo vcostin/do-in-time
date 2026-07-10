@@ -1,9 +1,9 @@
 use crate::core::browser_launcher::BrowserLauncher;
-use crate::db::{Database, ExecutionAction, RepeatInterval, Task, TaskStatus};
+use crate::db::{Database, ExecutionAction, Task, TaskStatus};
 use crate::error::Result;
+use crate::utils::schedule::next_future_occurrence;
 use crate::utils::validation::{validate_browser_profile, validate_url};
-use chrono::{Datelike, Duration, TimeZone, Timelike, Utc};
-use chrono_tz::Tz;
+use chrono::Utc;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
@@ -75,7 +75,11 @@ impl TaskExecutor {
                 if let Some(repeat_config) = &task.repeat_config {
                     match action {
                         ExecutionAction::Open => {
-                            let next = self.calculate_next_execution(&task, task.start_time)?;
+                            // Advance from the occurrence that just ran (not original start_time).
+                            let base = task
+                                .next_open_execution
+                                .unwrap_or(task.start_time);
+                            let next = next_future_occurrence(&task, base, Utc::now())?;
 
                             let should_continue =
                                 self.should_continue_repeating(&task, next, repeat_config);
@@ -143,75 +147,6 @@ impl TaskExecutor {
             (None, Some(end_date)) => next < *end_date,
             (None, None) => true,
         }
-    }
-
-    fn calculate_next_execution(
-        &self,
-        task: &Task,
-        base_time: chrono::DateTime<Utc>,
-    ) -> Result<chrono::DateTime<Utc>> {
-        let repeat_config = task
-            .repeat_config
-            .as_ref()
-            .expect("Task must have repeat config");
-
-        // Parse timezone
-        let tz: Tz = task.timezone.parse().map_err(|_| {
-            crate::error::AppError::TimeParse(format!("Invalid timezone: {}", task.timezone))
-        })?;
-
-        // Convert base time to task's timezone
-        let local_time = base_time.with_timezone(&tz);
-
-        // Calculate next occurrence based on interval
-        let next_local = match repeat_config.interval {
-            RepeatInterval::Daily => local_time + Duration::days(1),
-            RepeatInterval::Weekly => local_time + Duration::weeks(1),
-            RepeatInterval::Monthly => {
-                let month = local_time.month();
-                let year = local_time.year();
-
-                let (next_month, next_year) = if month == 12 {
-                    (1, year + 1)
-                } else {
-                    (month + 1, year)
-                };
-
-                let last_day_of_month =
-                    chrono::NaiveDate::from_ymd_opt(next_year, next_month + 1, 1)
-                        .unwrap_or_else(|| {
-                            chrono::NaiveDate::from_ymd_opt(next_year + 1, 1, 1).unwrap()
-                        })
-                        .pred_opt()
-                        .unwrap()
-                        .day();
-
-                let day = local_time.day().min(last_day_of_month);
-
-                let next_date = chrono::NaiveDate::from_ymd_opt(next_year, next_month, day)
-                    .ok_or_else(|| {
-                        crate::error::AppError::TimeParse(
-                            "Failed to calculate next month".to_string(),
-                        )
-                    })?;
-
-                let next_datetime = next_date
-                    .and_hms_opt(local_time.hour(), local_time.minute(), local_time.second())
-                    .ok_or_else(|| {
-                        crate::error::AppError::TimeParse(
-                            "Failed to create next datetime".to_string(),
-                        )
-                    })?;
-
-                tz.from_local_datetime(&next_datetime)
-                    .single()
-                    .ok_or_else(|| {
-                        crate::error::AppError::TimeParse("Ambiguous local time".to_string())
-                    })?
-            }
-        };
-
-        Ok(next_local.with_timezone(&Utc))
     }
 
     async fn send_notification_if_enabled(&self, task: &Task, action: &ExecutionAction) {

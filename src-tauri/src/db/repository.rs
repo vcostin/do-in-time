@@ -1,6 +1,7 @@
 use crate::db::connection::Database;
 use crate::db::models::*;
 use crate::error::{AppError, Result};
+use crate::utils::schedule::schedule_next_open_close;
 use crate::utils::validation::{validate_browser_profile, validate_url};
 use sqlx::Row;
 use std::str::FromStr;
@@ -15,13 +16,8 @@ impl Database {
             validate_browser_profile(profile)?;
         }
 
-        if task.next_open_execution.is_none() {
-            task.next_open_execution = Some(task.start_time);
-        }
-
-        if task.close_time.is_some() && task.next_close_execution.is_none() {
-            task.next_close_execution = task.close_time;
-        }
+        // Derive next open/close from start/close + repeat (skips past slots for repeats).
+        schedule_next_open_close(&mut task, chrono::Utc::now())?;
 
         let repeat_interval = task.repeat_config.as_ref().map(|r| r.interval.to_string());
         let repeat_end_after = task.repeat_config.as_ref().and_then(|r| r.end_after);
@@ -146,22 +142,8 @@ impl Database {
                 task.status = TaskStatus::Active;
             }
 
-            // Recalculate next execution times based on current time and new scheduled times
-            if task.start_time > now {
-                task.next_open_execution = Some(task.start_time);
-            } else {
-                task.next_open_execution = None;
-            }
-
-            if let Some(close_time) = task.close_time {
-                if close_time > now {
-                    task.next_close_execution = Some(close_time);
-                } else {
-                    task.next_close_execution = None;
-                }
-            } else {
-                task.next_close_execution = None;
-            }
+            // One-shot past times clear; repeating tasks advance to the next future slot.
+            schedule_next_open_close(&mut task, now)?;
         }
 
         let repeat_interval = task.repeat_config.as_ref().map(|r| r.interval.to_string());
