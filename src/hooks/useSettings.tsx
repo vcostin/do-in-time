@@ -1,14 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppSettings } from '../types/task';
 import { TauriTaskService } from '../services/tauri-api';
 
-export function useSettings() {
-  const [settings, setSettings] = useState<AppSettings>({
-    minimize_to_tray: false,
-    start_minimized: false,
-    show_notifications: false,
-    auto_start: false,
-  });
+const DEFAULT_SETTINGS: AppSettings = {
+  minimize_to_tray: false,
+  start_minimized: false,
+  show_notifications: false,
+  auto_start: false,
+  use_24_hour_clock: true,
+};
+
+interface SettingsContextValue {
+  settings: AppSettings;
+  loading: boolean;
+  error: string | null;
+  updateSettings: (newSettings: AppSettings) => Promise<void>;
+  toggleSetting: (key: keyof AppSettings) => Promise<void>;
+  refreshSettings: () => Promise<void>;
+}
+
+const SettingsContext = createContext<SettingsContextValue | null>(null);
+
+export function SettingsProvider({ children }: { children: ReactNode }) {
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,37 +40,24 @@ export function useSettings() {
   }, []);
 
   const updateSettings = useCallback(async (newSettings: AppSettings) => {
-    // Clear any previous errors
     setError(null);
-
-    // Save previous settings for rollback
     const previousSettings = settings;
 
     try {
-      // Optimistically update UI
       setSettings(newSettings);
-
-      // Save to database
       const updated = await TauriTaskService.updateSettings(newSettings);
 
-      // Apply auto-start setting only if it changed
       if (updated.auto_start !== previousSettings.auto_start) {
         try {
           await TauriTaskService.applyAutoStart(updated.auto_start);
         } catch (autoStartErr) {
-          // Auto-start might fail due to permissions or platform support
-          // Log but don't fail the entire operation since DB update succeeded
           console.warn('Auto-start setting could not be applied:', autoStartErr);
-
-          // Show a non-blocking warning
           const message = autoStartErr instanceof Error ? autoStartErr.message : 'Unknown error';
           setError(`Settings saved, but auto-start could not be configured: ${message}`);
         }
       }
     } catch (err) {
-      // Rollback on database error
       setSettings(previousSettings);
-
       const message = err instanceof Error ? err.message : 'Failed to update settings';
       setError(message);
       throw new Error(message);
@@ -64,24 +65,39 @@ export function useSettings() {
   }, [settings]);
 
   const toggleSetting = useCallback(async (key: keyof AppSettings) => {
-    const newSettings = {
+    await updateSettings({
       ...settings,
       [key]: !settings[key],
-    };
-    await updateSettings(newSettings);
+    });
   }, [settings, updateSettings]);
 
-  // Initial load
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
-  return {
-    settings,
-    loading,
-    error,
-    updateSettings,
-    toggleSetting,
-    refreshSettings: loadSettings,
-  };
+  const value = useMemo(
+    () => ({
+      settings,
+      loading,
+      error,
+      updateSettings,
+      toggleSetting,
+      refreshSettings: loadSettings,
+    }),
+    [settings, loading, error, updateSettings, toggleSetting, loadSettings],
+  );
+
+  return (
+    <SettingsContext.Provider value={value}>
+      {children}
+    </SettingsContext.Provider>
+  );
+}
+
+export function useSettings(): SettingsContextValue {
+  const ctx = useContext(SettingsContext);
+  if (!ctx) {
+    throw new Error('useSettings must be used within SettingsProvider');
+  }
+  return ctx;
 }

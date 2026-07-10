@@ -80,6 +80,13 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Schedule status: past one-shots, remove/add repeat, future-close-only stays Active
 - Broader suite (repository integration, frontend) remains optional follow-up
 
+### 12 / 24-hour time format setting
+
+**Status:** `done`  
+- Settings toggle `use_24_hour_clock` (default 24h)
+- Shared format helpers drive task cards, Activity, and react-datepicker
+- Stored wall times remain `YYYY-MM-DDTHH:mm` (24h) regardless of display
+
 ---
 
 ## Planned
@@ -152,20 +159,6 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - More tasks fit on screen without scrolling as much
 - Dual-timezone clarity and Log / Activity access remain obvious
 
-### 12 / 24-hour time format setting
-
-**Status:** `planned`  
-**Today:** Times use locale-default formatting (often 12-hour via `date-fns` `PPp` / `toLocaleString`) with no user override.
-
-**Future:**
-- Settings toggle: 12-hour vs 24-hour clock
-- Persist in `settings` and apply across task cards, Activity, forms/tooltips where times are shown
-- Keep schedule-zone dual display consistent with the chosen format
-
-**Acceptance:**
-- Choosing 24-hour shows times like `15:30` everywhere the preference applies
-- Preference survives app restart
-
 ### Calendar schedule view
 
 **Status:** `planned`  
@@ -231,4 +224,4 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
 - **Close (Win/Linux tab):** remains `on-hold` — no clear resolve yet (CDP / extension / native messaging still undecided). Ship safer scoping and soft close-miss handling when useful; do not promise true tab close until a path is chosen.
-- **Next iteration priority (suggested):** UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. Optional: repository/frontend tests. **Nuke DB** is backlog-only, very low priority.
+- **Next iteration priority (suggested):** UI polish (compact cards, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. Optional: repository/frontend tests. **Nuke DB** is backlog-only, very low priority.

@@ -1,4 +1,10 @@
 import {
+  composeDatetimeLocal,
+  displayDateTimePattern,
+  normalizeDate,
+  normalizeTime,
+  pickerDateTimeFormats,
+  splitDatetimeLocal,
   utcToZonedDatetimeString,
   zonedDatetimeStringToUtc,
 } from './datetime.ts';
@@ -64,4 +70,37 @@ Deno.test('JST wall clock converts to UTC', () => {
   const wall = '2026-03-15T09:00';
   const utc = zonedDatetimeStringToUtc(wall, 'Asia/Tokyo');
   assertEquals(utc, '2026-03-15T00:00:00.000Z');
+});
+
+Deno.test('splitDatetimeLocal and composeDatetimeLocal round-trip', () => {
+  assertEquals(splitDatetimeLocal('').date, '');
+  assertEquals(splitDatetimeLocal('2026-07-10T14:30').time, '14:30');
+  assertEquals(composeDatetimeLocal('2026-07-10', '14:30'), '2026-07-10T14:30');
+  assertEquals(composeDatetimeLocal('2026-07-10', '9:05'), '2026-07-10T09:05');
+  assertEquals(composeDatetimeLocal('', ''), '');
+  assertEquals(composeDatetimeLocal('2026-07-10', ''), null);
+  assertEquals(composeDatetimeLocal('', '14:30'), null);
+  assertEquals(composeDatetimeLocal('2026-02-30', '09:00'), null);
+});
+
+Deno.test('normalizeTime pads and rejects invalid', () => {
+  assertEquals(normalizeTime('9:30'), '09:30');
+  assertEquals(normalizeTime('23:59'), '23:59');
+  assertEquals(normalizeTime('24:00'), null);
+  assertEquals(normalizeTime('12:60'), null);
+  assertEquals(normalizeTime('noon'), null);
+});
+
+Deno.test('normalizeDate accepts calendar dates only', () => {
+  assertEquals(normalizeDate('2026-07-10'), '2026-07-10');
+  assertEquals(normalizeDate('2026-02-30'), null);
+  assertEquals(normalizeDate('07/10/2026'), null);
+  assertEquals(normalizeDate('not-a-date'), null);
+});
+
+Deno.test('picker and display formats follow 12/24h preference', () => {
+  assertEquals(pickerDateTimeFormats(true).timeFormat, 'HH:mm');
+  assertEquals(pickerDateTimeFormats(false).timeFormat, 'h:mm aa');
+  assertEquals(displayDateTimePattern(true).includes('HH:mm'), true);
+  assertEquals(displayDateTimePattern(false).includes('h:mm a'), true);
 });

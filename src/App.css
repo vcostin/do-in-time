@@ -17,3 +17,34 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* react-datepicker — match form chrome; ensure popper sits above modals */
+.react-datepicker-popper {
+  z-index: 60;
+}
+
+.dit-datepicker.react-datepicker {
+  font-family: inherit;
+  border-color: #d1d5db;
+  border-radius: 0.5rem;
+}
+
+.dit-datepicker .react-datepicker__header {
+  background-color: #f3f4f6;
+  border-bottom-color: #e5e7eb;
+}
+
+.dit-datepicker .react-datepicker__day--selected,
+.dit-datepicker .react-datepicker__day--keyboard-selected {
+  background-color: #2563eb;
+  border-radius: 0.375rem;
+}
+
+.dit-datepicker .react-datepicker__day:hover {
+  border-radius: 0.375rem;
+}
+
+.dit-datepicker .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item--selected {
+  background-color: #2563eb;
+}
+

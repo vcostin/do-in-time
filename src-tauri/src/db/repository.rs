@@ -422,6 +422,7 @@ impl Database {
                 "start_minimized" => settings.start_minimized = bool_value,
                 "show_notifications" => settings.show_notifications = bool_value,
                 "auto_start" => settings.auto_start = bool_value,
+                "use_24_hour_clock" => settings.use_24_hour_clock = bool_value,
                 _ => {}
             }
         }
@@ -432,11 +433,16 @@ impl Database {
     pub async fn update_setting(&self, key: &str, value: bool) -> Result<()> {
         let value_str = if value { "true" } else { "false" };
 
-        sqlx::query("UPDATE settings SET value = ? WHERE key = ?")
-            .bind(value_str)
-            .bind(key)
-            .execute(self.pool())
-            .await?;
+        sqlx::query(
+            r#"
+            INSERT INTO settings (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            "#,
+        )
+        .bind(key)
+        .bind(value_str)
+        .execute(self.pool())
+        .await?;
 
         Ok(())
     }
@@ -449,6 +455,8 @@ impl Database {
         self.update_setting("show_notifications", settings.show_notifications)
             .await?;
         self.update_setting("auto_start", settings.auto_start)
+            .await?;
+        self.update_setting("use_24_hour_clock", settings.use_24_hour_clock)
             .await?;
         Ok(())
     }

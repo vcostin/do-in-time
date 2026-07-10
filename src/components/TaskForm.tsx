@@ -13,6 +13,7 @@ import {
 } from '../utils/timezone';
 import * as chrono from 'chrono-node';
 import type { ParsedComponents } from 'chrono-node';
+import { DateTimeLocalFields } from './DateTimeLocalFields';
 
 interface TaskFormProps {
   initialTask: Task | null;
@@ -392,12 +393,10 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           Start Time
           <InfoTooltip text="Wall-clock open time in the schedule timezone above. Saved as UTC; repeats follow that zone's DST rules." />
         </label>
-        <input
-          type="datetime-local"
+        <DateTimeLocalFields
           required
           value={formData.startTime}
-          onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          onChange={(startTime) => setFormData({ ...formData, startTime })}
         />
       </div>
 
@@ -406,11 +405,9 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           Close Time (optional)
           <InfoTooltip text="Optional wall-clock close time in the schedule timezone. Leave empty if you don't want to automatically close the browser." />
         </label>
-        <input
-          type="datetime-local"
+        <DateTimeLocalFields
           value={formData.closeTime}
-          onChange={(e) => setFormData({ ...formData, closeTime: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          onChange={(closeTime) => setFormData({ ...formData, closeTime })}
         />
       </div>
 
@@ -482,11 +479,9 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
               End date (optional)
               <InfoTooltip text="Stop repeating after this date and time (in the schedule timezone). Leave empty for unlimited repetitions." />
             </label>
-            <input
-              type="datetime-local"
+            <DateTimeLocalFields
               value={formData.repeatEndDate}
-              onChange={(e) => setFormData({ ...formData, repeatEndDate: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              onChange={(repeatEndDate) => setFormData({ ...formData, repeatEndDate })}
             />
           </div>
         </div>

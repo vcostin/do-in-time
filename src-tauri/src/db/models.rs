@@ -242,10 +242,29 @@ impl Task {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
     pub show_notifications: bool,
     pub auto_start: bool,
+    /// When true, UI times use 24-hour clock; when false, 12-hour with AM/PM.
+    #[serde(default = "default_true")]
+    pub use_24_hour_clock: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            minimize_to_tray: false,
+            start_minimized: false,
+            show_notifications: false,
+            auto_start: false,
+            use_24_hour_clock: true,
+        }
+    }
 }

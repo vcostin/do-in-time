@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { format } from 'date-fns';
 import { RecentExecutionLogEntry } from '../types/task';
 import { TauriTaskService } from '../services/tauri-api';
 import { listen } from '@tauri-apps/api/event';
+import { formatUtcForDisplay } from '../utils/datetime';
+import { useSettings } from '../hooks/useSettings';
 
 interface ActivityModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface ActivityModalProps {
 }
 
 export function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
+  const { settings } = useSettings();
   const [entries, setEntries] = useState<RecentExecutionLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
 
   const formatDate = (dateStr: string) => {
     try {
-      return format(new Date(dateStr), 'PPp');
+      return formatUtcForDisplay(dateStr, settings.use_24_hour_clock);
     } catch {
       return dateStr;
     }

@@ -111,6 +111,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               description="Display desktop notifications when tasks are executed"
             />
             <ToggleSwitch
+              enabled={settings.use_24_hour_clock}
+              onChange={() => handleToggle('use_24_hour_clock')}
+              label="24-hour clock"
+              description="Show times as 15:30 instead of 3:30 PM (task cards, Activity, and date pickers)"
+            />
+            <ToggleSwitch
               enabled={settings.auto_start}
               onChange={() => handleToggle('auto_start')}
               label="Auto-Start"

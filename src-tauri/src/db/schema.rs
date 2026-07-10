@@ -88,7 +88,8 @@ pub async fn initialize_schema(pool: &SqlitePool) -> Result<()> {
             ('minimize_to_tray', 'false'),
             ('start_minimized', 'false'),
             ('show_notifications', 'false'),
-            ('auto_start', 'false')
+            ('auto_start', 'false'),
+            ('use_24_hour_clock', 'true')
         "#,
     )
     .execute(pool)

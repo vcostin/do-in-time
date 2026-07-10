@@ -86,4 +86,6 @@ export interface AppSettings {
   start_minimized: boolean;
   show_notifications: boolean;
   auto_start: boolean;
+  /** When true, show times as 15:30; when false, as 3:30 PM. */
+  use_24_hour_clock: boolean;
 }

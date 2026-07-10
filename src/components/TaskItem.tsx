@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Task, TaskStatus, BROWSER_LABELS, TaskExecutionLogEntry } from '../types/task';
-import { format } from 'date-fns';
-import { formatUtcInZone } from '../utils/datetime';
+import { formatUtcForDisplay, formatUtcInZone } from '../utils/datetime';
 import { getSystemTimeZone } from '../utils/timezone';
+import { useSettings } from '../hooks/useSettings';
 
 interface TaskItemProps {
   task: Task;
@@ -21,6 +21,8 @@ export function TaskItem({
   onResume,
   onLoadLog,
 }: TaskItemProps) {
+  const { settings } = useSettings();
+  const use24Hour = settings.use_24_hour_clock;
   const [showLog, setShowLog] = useState(false);
   const [logEntries, setLogEntries] = useState<TaskExecutionLogEntry[]>([]);
   const [logLoading, setLogLoading] = useState(false);
@@ -39,7 +41,7 @@ export function TaskItem({
 
   const formatDate = (dateStr: string) => {
     try {
-      return format(new Date(dateStr), 'PPp');
+      return formatUtcForDisplay(dateStr, use24Hour);
     } catch {
       return dateStr;
     }
@@ -47,7 +49,7 @@ export function TaskItem({
 
   const formatScheduleDate = (dateStr: string) => {
     try {
-      return `${formatUtcInZone(dateStr, scheduleZone)} ${scheduleZone}`;
+      return `${formatUtcInZone(dateStr, scheduleZone, use24Hour)} ${scheduleZone}`;
     } catch {
       return dateStr;
     }
