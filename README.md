@@ -35,7 +35,7 @@ A cross-platform desktop application for scheduling browsers to open and close a
 - **Visual Feedback**: Color-coded status indicators and tooltips
 - **Dark mode**: [Planned](BACKLOG.md) — styles exist; theme switching not wired yet
 
-See [BACKLOG.md](BACKLOG.md) for deferred work (profile management, dark mode, major close improvements).
+See [BACKLOG.md](BACKLOG.md) for deferred work (failure logging, profile management, dark mode, major close improvements).
 
 ## Installation
 

@@ -30,6 +30,24 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 
 ## Planned
 
+### Failure logging / last error
+
+**Status:** `planned`  
+**Why:** When a task becomes `Failed`, the UI only shows the status — not *why* (launch failed, close failed, validation, etc.). Needed to diagnose and fix issues in later iterations.
+
+**Today:** Errors are returned from `TaskExecutor` / launcher and the task is marked `Failed`; no `last_error` (or history) is persisted or shown.
+
+**Future (minimal first, then optional history):**
+- Persist `last_error` (and `last_execution_at`) on the task when open/close fails
+- Clear `last_error` on successful run or when the user retries / reactivates
+- Show the message on the task card (and optionally in a notification body)
+- Later: append-only execution log table if a full history UI is needed
+
+**Acceptance:**
+- A failed open or close leaves a human-readable reason visible in the app
+- Success clears or supersedes the previous error
+- No secrets (full profile paths with credentials, etc.) in stored messages
+
 ### Profile management
 
 **Status:** `planned`  
@@ -58,9 +76,19 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Dark theme is reachable without manual DOM hacks
 - Preference survives app restart
 
+### Pause / Disabled + retry Failed
+
+**Status:** `planned`  
+**Today:** Only `active` / `completed` / `failed`. Failed tasks stay failed until schedule times are edited.
+
+**Future:**
+- `disabled` (or paused) status so routines can be stopped without deleting
+- Retry / re-enable control for Failed tasks without changing times
+
 ---
 
 ## Notes
 
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
+- **Next iteration priority (suggested):** failure logging → pause/retry → (then profile / dark mode). Close remains on-hold.
