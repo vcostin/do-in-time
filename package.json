@@ -18,7 +18,8 @@
     "date-fns-tz": "3.2.0",
     "react": "^19.1.0",
     "react-datepicker": "^7.5.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.18.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

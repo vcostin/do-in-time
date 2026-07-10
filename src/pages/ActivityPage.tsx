@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { RecentExecutionLogEntry } from '../types/task';
 import { TauriTaskService } from '../services/tauri-api';
-import { listen } from '@tauri-apps/api/event';
 import { formatUtcForDisplay } from '../utils/datetime';
 import { useSettings } from '../hooks/useSettings';
+import { PageHeader } from '../components/PageHeader';
 
-interface ActivityModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-export function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
+export function ActivityPage() {
   const { settings } = useSettings();
   const [entries, setEntries] = useState<RecentExecutionLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -31,27 +27,17 @@ export function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
   }, [failuresOnly]);
 
   useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
     load();
-  }, [isOpen, load]);
+  }, [load]);
 
   useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
     const unlisten = listen('task-updated', () => {
       load();
     });
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [isOpen, load]);
-
-  if (!isOpen) {
-    return null;
-  }
+  }, [load]);
 
   const formatDate = (dateStr: string) => {
     try {
@@ -62,30 +48,15 @@ export function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow-xl">
-        <div className="flex items-center justify-between gap-4 p-4 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Activity
-            </h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Recent open/close runs across all tasks
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-            aria-label="Close"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+    <div>
+      <PageHeader
+        title="Activity"
+        description="Recent open/close runs across all tasks"
+        backTo="/"
+        backLabel="Back to list"
+      />
 
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
           <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input
@@ -105,7 +76,7 @@ export function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="p-4 max-h-[70vh] overflow-y-auto">
           {loading ? (
             <p className="text-sm text-gray-500">Loading…</p>
           ) : error ? (

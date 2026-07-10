@@ -1,9 +1,31 @@
-import { useState, useEffect, useCallback } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Task, TaskExecutionLogEntry } from '../types/task';
 import { TauriTaskService } from '../services/tauri-api';
 import { listen } from '@tauri-apps/api/event';
 
-export function useTasks() {
+interface TasksContextValue {
+  tasks: Task[];
+  loading: boolean;
+  error: string | null;
+  createTask: (task: Task) => Promise<Task>;
+  updateTask: (id: number, task: Task) => Promise<Task>;
+  deleteTask: (id: number) => Promise<void>;
+  setTaskPaused: (id: number, paused: boolean) => Promise<Task>;
+  getTaskExecutionLog: (id: number, limit?: number) => Promise<TaskExecutionLogEntry[]>;
+  refreshTasks: () => Promise<void>;
+}
+
+const TasksContext = createContext<TasksContextValue | null>(null);
+
+export function TasksProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,15 +107,38 @@ export function useTasks() {
     };
   }, [loadTasks]);
 
-  return {
-    tasks,
-    loading,
-    error,
-    createTask,
-    updateTask,
-    deleteTask,
-    setTaskPaused,
-    getTaskExecutionLog,
-    refreshTasks: loadTasks,
-  };
+  const value = useMemo(
+    () => ({
+      tasks,
+      loading,
+      error,
+      createTask,
+      updateTask,
+      deleteTask,
+      setTaskPaused,
+      getTaskExecutionLog,
+      refreshTasks: loadTasks,
+    }),
+    [
+      tasks,
+      loading,
+      error,
+      createTask,
+      updateTask,
+      deleteTask,
+      setTaskPaused,
+      getTaskExecutionLog,
+      loadTasks,
+    ],
+  );
+
+  return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>;
+}
+
+export function useTasks(): TasksContextValue {
+  const ctx = useContext(TasksContext);
+  if (!ctx) {
+    throw new Error('useTasks must be used within TasksProvider');
+  }
+  return ctx;
 }
