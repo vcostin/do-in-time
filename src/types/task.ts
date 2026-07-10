@@ -6,7 +6,19 @@ export enum BrowserType {
   Brave = 'brave',
   Opera = 'opera',
   Chromium = 'chromium',
+  LibreWolf = 'librewolf',
 }
+
+export const BROWSER_LABELS: Record<BrowserType, string> = {
+  [BrowserType.Chrome]: 'Chrome',
+  [BrowserType.Firefox]: 'Firefox',
+  [BrowserType.Edge]: 'Edge',
+  [BrowserType.Safari]: 'Safari',
+  [BrowserType.Brave]: 'Brave',
+  [BrowserType.Opera]: 'Opera',
+  [BrowserType.Chromium]: 'Chromium',
+  [BrowserType.LibreWolf]: 'LibreWolf',
+};
 
 export enum TaskStatus {
   Active = 'active',

@@ -238,7 +238,7 @@ cargo test
 ### Code Style
 
 - **Rust**: Uses `rustfmt` and `clippy`
-- **TypeScript**: Deno check (`deno task check`) and the existing `tsconfig.json`
+- **TypeScript**: `deno task check` / `npm run check` (full `src/` via `tsc`)
 
 ## Troubleshooting
 

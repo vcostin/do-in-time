@@ -182,6 +182,7 @@ impl BrowserLauncher {
                 BrowserType::Brave => "Brave Browser",
                 BrowserType::Opera => "Opera",
                 BrowserType::Chromium => "Chromium",
+                BrowserType::LibreWolf => "LibreWolf",
             };
 
             // Sanitize URL to prevent AppleScript injection
@@ -299,13 +300,15 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "linux")]
                 {
-                    self.find_browser_path(&[
-                        "/usr/bin/google-chrome",
-                        "/usr/bin/google-chrome-stable",
-                        "/snap/bin/chromium",
-                        "/usr/bin/chromium-browser",
-                    ])
-                    .unwrap_or_else(|| "google-chrome".to_string())
+                    self.resolve_linux_command(
+                        &mut args,
+                        &[
+                            "/usr/bin/google-chrome",
+                            "/usr/bin/google-chrome-stable",
+                        ],
+                        &["google-chrome", "google-chrome-stable", "chrome"],
+                        Some("com.google.Chrome"),
+                    )
                 }
             }
             BrowserType::Firefox => {
@@ -337,8 +340,12 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "linux")]
                 {
-                    self.find_browser_path(&["/usr/bin/firefox", "/snap/bin/firefox"])
-                        .unwrap_or_else(|| "firefox".to_string())
+                    self.resolve_linux_command(
+                        &mut args,
+                        &["/usr/bin/firefox", "/snap/bin/firefox"],
+                        &["firefox"],
+                        Some("org.mozilla.firefox"),
+                    )
                 }
             }
             BrowserType::Edge => {
@@ -367,11 +374,15 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "linux")]
                 {
-                    self.find_browser_path(&[
-                        "/usr/bin/microsoft-edge",
-                        "/usr/bin/microsoft-edge-stable",
-                    ])
-                    .unwrap_or_else(|| "microsoft-edge".to_string())
+                    self.resolve_linux_command(
+                        &mut args,
+                        &[
+                            "/usr/bin/microsoft-edge",
+                            "/usr/bin/microsoft-edge-stable",
+                        ],
+                        &["microsoft-edge", "microsoft-edge-stable"],
+                        Some("com.microsoft.Edge"),
+                    )
                 }
             }
             BrowserType::Safari => {
@@ -408,8 +419,12 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "linux")]
                 {
-                    self.find_browser_path(&["/usr/bin/brave-browser", "/snap/bin/brave"])
-                        .unwrap_or_else(|| "brave-browser".to_string())
+                    self.resolve_linux_command(
+                        &mut args,
+                        &["/usr/bin/brave-browser", "/snap/bin/brave"],
+                        &["brave-browser", "brave"],
+                        Some("com.brave.Browser"),
+                    )
                 }
             }
             BrowserType::Opera => {
@@ -434,8 +449,12 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "linux")]
                 {
-                    self.find_browser_path(&["/usr/bin/opera", "/snap/bin/opera"])
-                        .unwrap_or_else(|| "opera".to_string())
+                    self.resolve_linux_command(
+                        &mut args,
+                        &["/usr/bin/opera", "/snap/bin/opera"],
+                        &["opera"],
+                        Some("com.opera.Opera"),
+                    )
                 }
             }
             BrowserType::Chromium => {
@@ -453,12 +472,51 @@ impl BrowserLauncher {
 
                 #[cfg(target_os = "linux")]
                 {
-                    self.find_browser_path(&[
-                        "/usr/bin/chromium-browser",
-                        "/usr/bin/chromium",
-                        "/snap/bin/chromium",
-                    ])
-                    .unwrap_or_else(|| "chromium-browser".to_string())
+                    self.resolve_linux_command(
+                        &mut args,
+                        &[
+                            "/usr/bin/chromium-browser",
+                            "/usr/bin/chromium",
+                            "/snap/bin/chromium",
+                        ],
+                        &["chromium", "chromium-browser"],
+                        Some("org.chromium.Chromium"),
+                    )
+                }
+            }
+            BrowserType::LibreWolf => {
+                if let Some(prof) = profile {
+                    args.push("-P".to_string());
+                    args.push(prof.to_string());
+                }
+
+                #[cfg(target_os = "windows")]
+                {
+                    self.find_browser_path_windows(
+                        "librewolf.exe",
+                        &[
+                            "C:\\Program Files\\LibreWolf\\librewolf.exe",
+                            "C:\\Program Files (x86)\\LibreWolf\\librewolf.exe",
+                        ],
+                    )
+                    .ok_or_else(|| {
+                        AppError::BrowserNotFound("LibreWolf executable not found".to_string())
+                    })?
+                }
+
+                #[cfg(target_os = "macos")]
+                {
+                    "LibreWolf".to_string()
+                }
+
+                #[cfg(target_os = "linux")]
+                {
+                    self.resolve_linux_command(
+                        &mut args,
+                        &["/usr/bin/librewolf", "/usr/local/bin/librewolf"],
+                        &["librewolf"],
+                        Some("io.gitlab.librewolf-community"),
+                    )
                 }
             }
         };
@@ -550,10 +608,69 @@ impl BrowserLauncher {
                 }
                 #[cfg(target_os = "linux")]
                 {
-                    "chromium-browser".to_string()
+                    "chromium".to_string()
+                }
+            }
+            BrowserType::LibreWolf => {
+                #[cfg(target_os = "windows")]
+                {
+                    "librewolf.exe".to_string()
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    "LibreWolf".to_string()
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    "librewolf".to_string()
                 }
             }
         }
+    }
+
+    /// Prefer a native binary; otherwise launch via Flatpak when available.
+    #[cfg(target_os = "linux")]
+    fn resolve_linux_command(
+        &self,
+        args: &mut Vec<String>,
+        paths: &[&str],
+        commands: &[&str],
+        flatpak_id: Option<&str>,
+    ) -> String {
+        if let Some(path) = self.find_browser_path(paths) {
+            return path;
+        }
+
+        for command in commands {
+            let found = Command::new("which")
+                .arg(command)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if found {
+                return command.to_string();
+            }
+        }
+
+        if let Some(app_id) = flatpak_id {
+            let installed = Command::new("flatpak")
+                .args(["info", app_id])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if installed {
+                let mut flatpak_args = vec!["run".to_string(), app_id.to_string()];
+                flatpak_args.append(args);
+                *args = flatpak_args;
+                return "flatpak".to_string();
+            }
+        }
+
+        commands
+            .first()
+            .copied()
+            .unwrap_or("browser")
+            .to_string()
     }
 
     #[cfg(target_os = "linux")]

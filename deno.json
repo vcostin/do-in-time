@@ -2,10 +2,10 @@
   "nodeModulesDir": "auto",
   "tasks": {
     "dev": "vite",
-    "build": "vite build",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "build": "deno task check && vite build",
     "preview": "vite preview",
-    "tauri": "tauri",
-    "check": "deno check src/main.tsx"
+    "tauri": "tauri"
   },
   "compilerOptions": {
     "lib": ["ES2020", "DOM", "DOM.Iterable", "deno.ns"],

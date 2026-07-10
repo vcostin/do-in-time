@@ -1,4 +1,4 @@
-import { Task, TaskStatus } from '../types/task';
+import { Task, TaskStatus, BROWSER_LABELS } from '../types/task';
 import { format } from 'date-fns';
 
 interface TaskItemProps {
@@ -38,7 +38,7 @@ export function TaskItem({ task, onEdit, onDelete }: TaskItemProps) {
           <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
             <div className="flex items-center gap-2">
               <span className="font-medium">Browser:</span>
-              <span className="capitalize">{task.browser}</span>
+              <span>{BROWSER_LABELS[task.browser] ?? task.browser}</span>
             </div>
 
             {task.url && (

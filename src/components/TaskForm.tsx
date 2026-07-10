@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Task, BrowserType, TaskStatus, RepeatInterval } from '../types/task';
+import { Task, BrowserType, BROWSER_LABELS, TaskStatus, RepeatInterval } from '../types/task';
 import { utcToLocalDatetimeString, localDatetimeStringToUtc } from '../utils/datetime';
 import * as chrono from 'chrono-node';
 
@@ -30,14 +30,40 @@ const InfoTooltip = ({ text }: { text: string }) => (
   </div>
 );
 
+function orderBrowsers(
+  installed: BrowserType[],
+  defaultBr: BrowserType | null,
+  preferred?: BrowserType | null,
+): BrowserType[] {
+  const ordered = [...installed];
+
+  const moveToFront = (browser: BrowserType | null | undefined) => {
+    if (!browser) return;
+    const index = ordered.indexOf(browser);
+    if (index > 0) {
+      ordered.splice(index, 1);
+      ordered.unshift(browser);
+    } else if (index === -1) {
+      ordered.unshift(browser);
+    }
+  };
+
+  // Keep edit selection available even if detection missed it, then prefer system default.
+  moveToFront(preferred);
+  moveToFront(defaultBr);
+  return ordered;
+}
+
 export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [detectingBrowsers, setDetectingBrowsers] = useState(true);
+  const [browserError, setBrowserError] = useState<string | null>(null);
   const [installedBrowsers, setInstalledBrowsers] = useState<BrowserType[]>([]);
   const [defaultBrowser, setDefaultBrowser] = useState<BrowserType | null>(null);
   const [naturalLanguageTime, setNaturalLanguageTime] = useState('');
   const [formData, setFormData] = useState({
     name: '',
-    browser: BrowserType.Chrome,
+    browser: '' as BrowserType | '',
     url: '',
     allowCloseAll: false,
     browserProfile: '',
@@ -53,29 +79,41 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
   // Detect installed browsers on mount
   useEffect(() => {
     const detectBrowsers = async () => {
-      try {
-        const installed = await invoke<BrowserType[]>('get_installed_browsers');
-        const defaultBr = await invoke<BrowserType | null>('get_default_browser');
+      setDetectingBrowsers(true);
+      setBrowserError(null);
 
-        setInstalledBrowsers(installed);
+      try {
+        const [installed, defaultBr] = await Promise.all([
+          invoke<BrowserType[]>('get_installed_browsers'),
+          invoke<BrowserType | null>('get_default_browser'),
+        ]);
+
+        const ordered = orderBrowsers(installed, defaultBr, initialTask?.browser);
+        setInstalledBrowsers(ordered);
         setDefaultBrowser(defaultBr);
 
-        // Set default browser if available and not editing an existing task
-        if (!initialTask && defaultBr && installed.includes(defaultBr)) {
-          setFormData(prev => ({ ...prev, browser: defaultBr }));
-        } else if (!initialTask && installed.length > 0) {
-          // If no default detected, use first installed browser
-          setFormData(prev => ({ ...prev, browser: installed[0] }));
+        if (!initialTask) {
+          const preferred =
+            (defaultBr && ordered.includes(defaultBr) && defaultBr) ||
+            ordered[0] ||
+            '';
+          setFormData(prev => ({ ...prev, browser: preferred }));
+        }
+
+        if (ordered.length === 0) {
+          setBrowserError('No supported browsers were detected on this system.');
         }
       } catch (error) {
         console.error('Failed to detect browsers:', error);
-        // Fallback: use all browsers if detection fails
-        setInstalledBrowsers(Object.values(BrowserType));
+        setInstalledBrowsers([]);
+        setBrowserError('Could not detect installed browsers. Check app permissions and try again.');
+      } finally {
+        setDetectingBrowsers(false);
       }
     };
 
     detectBrowsers();
-  }, []);
+  }, [initialTask]);
 
   useEffect(() => {
     if (initialTask) {
@@ -125,6 +163,10 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.browser) {
+      setBrowserError('Select an installed browser before saving.');
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -186,24 +228,33 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         <div>
           <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Browser
-            <InfoTooltip text="Select which browser to control. Only browsers detected on your system are shown." />
+            <InfoTooltip text="Only browsers detected on this system are listed. The system default browser is selected automatically for new tasks." />
           </label>
           <select
+            required
+            disabled={detectingBrowsers || installedBrowsers.length === 0}
             value={formData.browser}
             onChange={(e) => setFormData({ ...formData, browser: e.target.value as BrowserType })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
           >
-            {(installedBrowsers.length > 0 ? installedBrowsers : Object.values(BrowserType)).map((browser) => (
-              <option key={browser} value={browser} className="capitalize">
-                {browser.charAt(0).toUpperCase() + browser.slice(1)}
+            {detectingBrowsers && <option value="">Detecting installed browsers...</option>}
+            {!detectingBrowsers && installedBrowsers.length === 0 && (
+              <option value="">No installed browsers found</option>
+            )}
+            {installedBrowsers.map((browser) => (
+              <option key={browser} value={browser}>
+                {BROWSER_LABELS[browser]}
                 {browser === defaultBrowser ? ' (Default)' : ''}
               </option>
             ))}
           </select>
-          {installedBrowsers.length === 0 && (
+          {detectingBrowsers && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Detecting installed browsers...
             </p>
+          )}
+          {browserError && (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{browserError}</p>
           )}
         </div>
       </div>

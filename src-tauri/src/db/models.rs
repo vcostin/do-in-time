@@ -31,6 +31,7 @@ pub enum BrowserType {
     Brave,
     Opera,
     Chromium,
+    LibreWolf,
 }
 
 impl std::fmt::Display for BrowserType {
@@ -43,6 +44,7 @@ impl std::fmt::Display for BrowserType {
             BrowserType::Brave => "brave",
             BrowserType::Opera => "opera",
             BrowserType::Chromium => "chromium",
+            BrowserType::LibreWolf => "librewolf",
         };
         write!(f, "{}", s)
     }
@@ -60,6 +62,7 @@ impl std::str::FromStr for BrowserType {
             "brave" => Ok(BrowserType::Brave),
             "opera" => Ok(BrowserType::Opera),
             "chromium" => Ok(BrowserType::Chromium),
+            "librewolf" => Ok(BrowserType::LibreWolf),
             _ => Err(format!("Unknown browser type: {}", s)),
         }
     }
