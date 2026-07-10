@@ -111,6 +111,15 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Shared `AppLayout`; Settings/Activity are pages (modals removed); tray `open-settings` navigates to `/settings`
 - `TasksProvider` shares task state across list/calendar/edit
 
+### Docs / capabilities polish
+
+**Status:** `done`  
+- README Features catch-up (calendar, routes, 12/24h, unsaved guard, soft close, settings)
+- “Server-side” wording → Rust / Tauri IPC validation
+- Linux close tools (`wmctrl` / `xdotool`), Wayland limits, soft close-miss troubleshooting
+- DB wipe documented as last resort (prefer Log / Activity)
+- Capabilities grant `notification:default` and `autostart:default`; soft-fail when OS denies remains intentional
+
 ---
 
 ## Planned
@@ -140,7 +149,7 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 **Future:**
 - Scope window matching to the task’s browser where possible
 - Prefer exact process-name kills (`pkill -x` / equivalent) over substring cmdline matches
-- Document required tools (`wmctrl` / `xdotool`) and Wayland limitations in-app and in the README
+- Surface clearer in-app errors when close tools are missing (README already documents `wmctrl` / `xdotool` and Wayland limits)
 
 **Acceptance:**
 - Close/kill paths do not intentionally target other browsers or unrelated processes
@@ -186,19 +195,6 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Dark theme is reachable without manual DOM hacks
 - Preference survives app restart
 
-### Docs / capabilities polish
-
-**Status:** `planned`  
-**Today:** Some README wording still reads like a web app (“server-side validation”); Linux close dependencies are under-documented; DB troubleshooting defaults to “delete the DB.”
-
-**Future:**
-- Document Linux close tools and Wayland limits
-- Clarify desktop IPC validation wording
-- Verify notification / autostart plugin permissions in Tauri capabilities so soft-fail paths are intentional, not silent misconfig
-
-**Acceptance:**
-- README troubleshooting matches real failure modes users hit on each OS
-
 ### Nuke / hard-reset database
 
 **Status:** `planned`  
@@ -223,4 +219,4 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
 - **Close (Win/Linux tab):** remains `on-hold` — no clear resolve yet (CDP / extension / native messaging still undecided). Ship safer scoping and soft close-miss handling when useful; do not promise true tab close until a path is chosen.
-- **Next iteration priority (suggested):** Docs/capabilities polish; harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. Optional: repository/frontend tests. **Nuke DB** is backlog-only, very low priority.
+- **Next iteration priority (suggested):** Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. Optional: repository/frontend tests; re-check AppImage on Arch. **Nuke DB** is backlog-only, very low priority.

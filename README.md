@@ -6,39 +6,47 @@ A cross-platform desktop application for scheduling browsers to open and close a
 
 ## Features
 
-### 🌐 Multi-Browser Support
-- **Automatic Detection**: Detects installed browsers (Chrome, Firefox, Edge, Safari, Brave, Opera, Chromium, LibreWolf)
-- **Default Browser**: Automatically selects your system's default browser
+### Multi-browser support
+- **Automatic detection**: Chrome, Firefox, Edge, Safari, Brave, Opera, Chromium, LibreWolf
+- **Default browser**: Prefills your system default when available
 
-### ⏰ Flexible Scheduling
-- **Natural Language Input**: Enter schedules like "January 31st from 9am to 11am ET" or "tomorrow at 2pm JST"
-- **Schedule timezone**: Pick an IANA zone (or let NL abbreviations like ET/PT/CET set it); wall times are entered in that zone
-- **UTC storage**: Instants are stored as UTC; repeats keep the same local wall clock across DST in the schedule zone
-- **Local display**: Task cards show your local time plus the schedule-zone time when they differ
-- **Repeating Tasks**: Daily, weekly, or monthly recurring schedules
-- **Close behavior**: Reliable tab close on macOS; Windows/Linux are best-effort (window title / optional close-all). True cross-platform tab close is [on hold](BACKLOG.md)
+### Flexible scheduling
+- **Natural language**: e.g. "January 31st from 9am to 11am ET" or "tomorrow at 2pm JST"
+- **Schedule timezone**: IANA zone picker; NL abbreviations (ET, PT, CET, JST, …) update it
+- **UTC storage**: Instants stored as UTC; repeats keep local wall clock across DST in the schedule zone
+- **Local display**: Task cards show operator-local time plus schedule-zone time when they differ
+- **12 / 24-hour clock**: Settings toggle (default 24h) for cards, Activity, and date pickers
+- **Repeating tasks**: Daily, weekly, or monthly with end-after / end-by-date
+- **Close behavior**: Reliable tab close on macOS; Windows/Linux are best-effort (window title, optional close-all). Soft close misses log and clear the close slot without failing the task. True cross-platform tab close is [on hold](BACKLOG.md)
 
-### 🔒 Security Features
-- **Input Validation**: Server-side validation prevents malicious URLs and path traversal
-- **Content Security Policy**: Enabled CSP to prevent XSS attacks
-- **Sanitized Execution**: Protected against AppleScript injection and command injection
-- **URL Scheme Filtering**: Blocks dangerous URL schemes (javascript:, data:, file:, etc.)
-
-### 🎯 Smart Task Management
-- **Real-time Updates**: Event-based UI updates for instant status changes
-- **Automatic Scheduling**: Background scheduler runs automatically on startup
-- **Task Status**: Monitor tasks (Active, Completed, Failed, Disabled)
-- **Failure logging**: Last error on the task card plus a recent execution log
-- **Activity feed**: Cross-task open/close history (with failures-only filter)
+### Task management
+- **List and calendar**: List view or Day / Week / Month calendar of upcoming open/close events
+- **Pages (not modals)**: Hash routes for home, calendar, new/edit task, Activity, Settings
+- **Unsaved leave guard**: Warns before leaving a task form with unsaved edits
+- **Statuses**: Active, Completed, Failed, Disabled
+- **Failure logging**: Last error on the card plus a per-task execution log
+- **Activity feed**: Cross-task open/close history (optional failures-only filter)
 - **Pause / Retry**: Pause active tasks; resume disabled or retry failed without deleting
 
-### 🎨 Modern UI
-- **Responsive Design**: Clean, intuitive interface built with React and Tailwind CSS
-- **Quick Time Entry**: Natural language date parsing for faster task creation
-- **Visual Feedback**: Color-coded status indicators and tooltips
-- **Dark mode**: [Planned](BACKLOG.md) — styles exist; theme switching not wired yet
+### Settings
+- Minimize to tray / start minimized
+- Desktop notifications for open/close (and failures / close misses)
+- Launch at login (auto-start)
+- 12 / 24-hour time format
 
-See [BACKLOG.md](BACKLOG.md) for deferred work (profile management, dark mode, major close improvements).
+### Security
+- **Command validation**: Task create/update inputs are validated in the Rust backend (Tauri IPC), not only in the UI
+- **Content Security Policy**: CSP on the webview to limit XSS impact
+- **Sanitized execution**: Guards against AppleScript / shell injection in launch and close paths
+- **URL scheme filtering**: Blocks dangerous schemes (`javascript:`, `data:`, `file:`, etc.)
+
+### UI
+- React + Tailwind; sticky header while scrolling
+- react-datepicker for start/close times (respects 12/24h setting)
+- Compact task cards; color-coded status
+- **Dark mode**: [Planned](BACKLOG.md) — `dark:` styles exist; theme switching not wired yet
+
+See [BACKLOG.md](BACKLOG.md) for deferred work (AppImage on Arch, profile management, dark mode, major close improvements).
 
 ## Installation
 
@@ -58,6 +66,15 @@ sudo pacman -S --needed \
   webkit2gtk-4.1 base-devel curl wget file openssl \
   appmenu-gtk-module libappindicator-gtk3 librsvg
 ```
+
+For **scheduled close on Linux** (title match), also install one of:
+
+```bash
+sudo pacman -S --needed wmctrl   # preferred
+# or: sudo pacman -S --needed xdotool
+```
+
+Without `wmctrl`/`xdotool`, Linux close falls back to “close missed” (or process kill if **Allow close all** is enabled). On **Wayland**, those tools are X11-oriented and often find no windows — expect soft close misses unless you use allow-close-all or run under X11.
 
 Optional but recommended: install the Tauri CLI with Cargo so you never need the
 npm-based CLI binary:
@@ -153,7 +170,8 @@ deno task dev
 ### Closing browsers
 
 - **macOS**: closes tabs whose URL contains the scheduled URL (AppleScript).
-- **Windows / Linux**: closes windows whose title contains the URL host (best-effort). If nothing matches, enable **Allow close all browser instances** to terminate that browser’s processes as a fallback. Without a URL, close always requires that option.
+- **Windows**: closes windows whose title contains the URL host (best-effort). If nothing matches, enable **Allow close all browser instances** to terminate that browser’s processes. Without a URL, close always requires that option.
+- **Linux**: same title-match idea via **`wmctrl`** (preferred) or **`xdotool`**. If neither tool is installed, or no window title matches (common on **Wayland**), the run is a **soft close miss**: logged as “Close missed”, close slot cleared, task not marked Failed. **Allow close all** uses `pkill -f` on a short browser name as a last resort (can match unrelated processes — see [BACKLOG.md](BACKLOG.md)).
 
 ### Managing Tasks
 
@@ -187,10 +205,11 @@ The scheduler starts automatically on application launch. You can:
 - **Chrono-node**: Natural language date parsing
 
 ### Security
-- **Input Validation**: All user inputs validated server-side
-- **Parameterized Queries**: SQL injection prevention
-- **Command Sanitization**: Protected against command injection
-- **CSP Enabled**: Cross-site scripting prevention
+- **IPC validation**: Create/update payloads are checked in Rust command handlers before DB writes
+- **Parameterized queries**: SQL injection prevention
+- **Command sanitization**: Launch/close paths avoid shell injection
+- **CSP**: Webview content security policy
+- **Plugin permissions**: Notifications and auto-start are allowed in `src-tauri/capabilities/default.json`; OS may still deny them (settings stay saved; auto-start surfaces a warning if apply fails)
 
 ## Database Schema
 
@@ -298,22 +317,37 @@ deno task test:utils
 
 ## Troubleshooting
 
-### Browser Not Detected
+### Browser not detected
 - Ensure the browser is installed in the default location
 - Check if the browser executable is in your PATH
 
-### Task Not Executing
+### Task not executing
 - Verify the scheduler is running (green indicator)
 - Check task status — it should be **Active** (not Disabled, Failed, or Completed)
 - Ensure the next open/close time is in the future (or use **Retry** after a failure)
 - On the task card, check **Last error** and expand **Log** for recent open/close attempts
 - If notifications are enabled in Settings, failure alerts include the error message
 
-### Database Issues
-If you encounter database errors:
+### Close missed (Linux / Windows)
+- Soft miss means no matching window/tab was found; the task is not Failed
+- Linux: install `wmctrl` or `xdotool`; on Wayland, title close often fails — try X11 (`GDK_BACKEND=x11`) or enable **Allow close all** knowing it kills by process name
+- Confirm the browser window title contains the URL host (or path fragment used as the needle)
+- Check **Log** / Activity for the exact “Close missed” message
+
+### Notifications or auto-start not applying
+- Toggle the setting in **Settings**; auto-start failures keep the saved preference and show a warning
+- Confirm the OS allowed notifications / login items for the app
+- Capabilities include `notification:default` and `autostart:default`; missing OS permission is still a soft failure by design
+
+### Database issues
+Prefer diagnosing with **Last error**, **Log**, and **Activity** before wiping data.
+
+If the app will not start or the schema is clearly corrupt:
 1. Close the application
-2. Delete the database file (see Database Location above)
-3. Restart the application (fresh database will be created)
+2. Back up then delete the DB file for **this** build (release `data.db` vs debug `dev-data.db` — see Database Location)
+3. Restart (a fresh database is created)
+
+In-app “nuke all data” is [not shipped](BACKLOG.md).
 
 ### Tray restore: title-bar buttons unclickable (Linux / KDE)
 After hiding to the tray and showing again, minimize / maximize / close can stop responding until you double-click the title bar. This is a known Tauri + Wayland decoration bug; the app toggles window `resizable` on show/focus as a workaround. If it still happens, try launching under X11 (`GDK_BACKEND=x11`) or update Tauri when upstream fixes land.
