@@ -24,6 +24,7 @@ export function TaskItem({
   const { settings } = useSettings();
   const use24Hour = settings.use_24_hour_clock;
   const [showLog, setShowLog] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [logEntries, setLogEntries] = useState<TaskExecutionLogEntry[]>([]);
   const [logLoading, setLogLoading] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
@@ -38,6 +39,9 @@ export function TaskItem({
   const localZone = getSystemTimeZone();
   const scheduleZone = task.timezone || localZone;
   const showScheduleZone = scheduleZone !== localZone;
+  const isActive = task.status === TaskStatus.Active;
+  const showNextOpen = Boolean(task.next_open_execution && isActive);
+  const showNextClose = Boolean(task.next_close_execution && isActive);
 
   const formatDate = (dateStr: string) => {
     try {
@@ -55,17 +59,20 @@ export function TaskItem({
     }
   };
 
-  const TimeLine = ({ label, value }: { label: string; value: string }) => (
-    <div className="flex items-start gap-2">
-      <span className="font-medium shrink-0">{label}</span>
-      <span className="min-w-0">
-        <span className="block">{formatDate(value)}</span>
-        {showScheduleZone && (
-          <span className="block text-xs text-gray-500 dark:text-gray-500">
-            {formatScheduleDate(value)}
-          </span>
-        )}
+  const TimeCell = ({ label, value }: { label: string; value: string }) => (
+    <div className="min-w-0">
+      <span className="text-xs font-medium text-gray-500 dark:text-gray-500">{label}</span>
+      <span className="block text-sm text-gray-700 dark:text-gray-300 truncate" title={formatDate(value)}>
+        {formatDate(value)}
       </span>
+      {showScheduleZone && (
+        <span
+          className="block text-xs text-gray-500 dark:text-gray-500 truncate"
+          title={formatScheduleDate(value)}
+        >
+          {formatScheduleDate(value)}
+        </span>
+      )}
     </div>
   );
 
@@ -104,95 +111,113 @@ export function TaskItem({
   const canResume =
     task.id != null &&
     (task.status === TaskStatus.Disabled || task.status === TaskStatus.Failed);
+  const hasDetails =
+    showNextOpen ||
+    showNextClose ||
+    showScheduleZone ||
+    Boolean(task.last_execution_at);
+
+  const metaParts = [
+    BROWSER_LABELS[task.browser] ?? task.browser,
+    task.repeat_config
+      ? task.repeat_config.interval.charAt(0).toUpperCase() +
+        task.repeat_config.interval.slice(1)
+      : null,
+  ].filter(Boolean);
+
+  const actionBtn =
+    'px-2 py-0.5 text-xs rounded transition-colors';
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-      <div className="flex items-start justify-between gap-4">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm px-3 py-2.5 hover:shadow transition-shadow">
+      <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-2 flex-wrap">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
               {task.name}
             </h3>
             <span
-              className={`px-2 py-1 text-xs font-medium rounded-full capitalize ${statusColors[task.status]}`}
+              className={`px-1.5 py-0.5 text-[11px] font-medium rounded capitalize ${statusColors[task.status]}`}
             >
               {task.status}
             </span>
           </div>
 
-          <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">Browser:</span>
-              <span>{BROWSER_LABELS[task.browser] ?? task.browser}</span>
-            </div>
-
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 min-w-0">
+            <span className="shrink-0">{metaParts.join(' · ')}</span>
             {task.url && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">URL:</span>
-                <span className="truncate max-w-md">{task.url}</span>
-              </div>
-            )}
-
-            <TimeLine label="Start Time:" value={task.start_time} />
-
-            {task.close_time && <TimeLine label="Close Time:" value={task.close_time} />}
-
-            {task.next_open_execution && task.status === TaskStatus.Active && (
-              <TimeLine label="Next Open:" value={task.next_open_execution} />
-            )}
-
-            {task.next_close_execution && task.status === TaskStatus.Active && (
-              <TimeLine label="Next Close:" value={task.next_close_execution} />
-            )}
-
-            <div className="flex items-center gap-2">
-              <span className="font-medium">Schedule TZ:</span>
-              <span>{scheduleZone}</span>
-            </div>
-
-            {task.repeat_config && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Repeat:</span>
-                <span className="capitalize">{task.repeat_config.interval}</span>
-              </div>
-            )}
-
-            {task.last_execution_at && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Last run:</span>
-                <span>{formatDate(task.last_execution_at)}</span>
-              </div>
+              <>
+                <span className="shrink-0 text-gray-300 dark:text-gray-600">·</span>
+                <span className="truncate" title={task.url}>
+                  {task.url}
+                </span>
+              </>
             )}
           </div>
 
+          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+            {showNextOpen && task.next_open_execution ? (
+              <TimeCell label="Next open" value={task.next_open_execution} />
+            ) : (
+              <TimeCell label="Start" value={task.start_time} />
+            )}
+            {showNextClose && task.next_close_execution ? (
+              <TimeCell label="Next close" value={task.next_close_execution} />
+            ) : task.close_time ? (
+              <TimeCell label="Close" value={task.close_time} />
+            ) : (
+              <div />
+            )}
+          </div>
+
+          {(showNextOpen || showNextClose) && showDetails && (
+            <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1.5">
+              <TimeCell label="Start" value={task.start_time} />
+              {task.close_time ? (
+                <TimeCell label="Close" value={task.close_time} />
+              ) : (
+                <div />
+              )}
+            </div>
+          )}
+
+          {showDetails && (showScheduleZone || task.last_execution_at) && (
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500 dark:text-gray-500">
+              {showScheduleZone && <span>Schedule TZ: {scheduleZone}</span>}
+              {task.last_execution_at && (
+                <span>Last run: {formatDate(task.last_execution_at)}</span>
+              )}
+            </div>
+          )}
+
           {task.last_error && (
-            <div className="mt-3 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3">
-              <p className="text-xs font-medium text-red-800 dark:text-red-200 mb-1">
+            <div className="mt-2 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-2 py-1.5">
+              <p className="text-[11px] font-medium text-red-800 dark:text-red-200">
                 Last error
               </p>
-              <p className="text-sm text-red-700 dark:text-red-300 break-words">
+              <p className="text-xs text-red-700 dark:text-red-300 break-words line-clamp-2">
                 {task.last_error}
               </p>
             </div>
           )}
 
           {showLog && (
-            <div className="mt-3 rounded-md border border-gray-200 dark:border-gray-700 p-3">
-              <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <div className="mt-2 rounded border border-gray-200 dark:border-gray-700 px-2 py-1.5">
+              <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Recent execution log
               </p>
               {logLoading ? (
-                <p className="text-sm text-gray-500">Loading…</p>
+                <p className="text-xs text-gray-500">Loading…</p>
               ) : logError ? (
-                <p className="text-sm text-red-600 dark:text-red-400">{logError}</p>
+                <p className="text-xs text-red-600 dark:text-red-400">{logError}</p>
               ) : logEntries.length === 0 ? (
-                <p className="text-sm text-gray-500">No runs logged yet.</p>
+                <p className="text-xs text-gray-500">No runs logged yet.</p>
               ) : (
-                <ul className="space-y-2 max-h-48 overflow-y-auto">
+                <ul className="space-y-1.5 max-h-36 overflow-y-auto">
                   {logEntries.map((entry) => (
                     <li
                       key={entry.id}
-                      className="text-xs text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700 pb-2 last:border-0"
+                      className="text-xs text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700 pb-1.5 last:border-0"
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium capitalize">{entry.action}</span>
@@ -208,7 +233,7 @@ export function TaskItem({
                         <span>{formatDate(entry.created_at)}</span>
                       </div>
                       {entry.message && entry.message !== 'ok' && (
-                        <p className="mt-1 break-words">{entry.message}</p>
+                        <p className="mt-0.5 break-words">{entry.message}</p>
                       )}
                     </li>
                   ))}
@@ -218,11 +243,11 @@ export function TaskItem({
           )}
         </div>
 
-        <div className="flex flex-col gap-2 shrink-0">
+        <div className="flex flex-wrap justify-end gap-1 shrink-0 max-w-[11rem]">
           {canPause && (
             <button
               onClick={() => task.id && onPause(task.id)}
-              className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              className={`${actionBtn} bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600`}
             >
               Pause
             </button>
@@ -230,26 +255,35 @@ export function TaskItem({
           {canResume && (
             <button
               onClick={() => task.id && onResume(task.id)}
-              className="px-3 py-1 text-sm bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 rounded hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors"
+              className={`${actionBtn} bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-800`}
             >
               {task.status === TaskStatus.Failed ? 'Retry' : 'Resume'}
             </button>
           )}
+          {hasDetails && (
+            <button
+              onClick={() => setShowDetails((v) => !v)}
+              className={`${actionBtn} bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600`}
+              title="Show start/close, last run, schedule timezone"
+            >
+              {showDetails ? 'Less' : 'More'}
+            </button>
+          )}
           <button
             onClick={() => setShowLog((v) => !v)}
-            className="px-3 py-1 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+            className={`${actionBtn} bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600`}
           >
             {showLog ? 'Hide log' : 'Log'}
           </button>
           <button
             onClick={() => onEdit(task)}
-            className="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+            className={`${actionBtn} bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800`}
           >
             Edit
           </button>
           <button
             onClick={() => task.id && onDelete(task.id)}
-            className="px-3 py-1 text-sm bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+            className={`${actionBtn} bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800`}
           >
             Delete
           </button>

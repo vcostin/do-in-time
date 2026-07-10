@@ -29,7 +29,7 @@ export function TaskList({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {tasks.map((task) => (
         <TaskItem
           key={task.id}
