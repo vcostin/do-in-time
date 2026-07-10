@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { createHashRouter, Navigate, RouterProvider } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout';
 import { TaskListPage } from './pages/TaskListPage';
 import { CalendarPage } from './pages/CalendarPage';
@@ -6,20 +6,24 @@ import { TaskFormPage } from './pages/TaskFormPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { SettingsPage } from './pages/SettingsPage';
 
+const router = createHashRouter([
+  {
+    path: '/',
+    element: <AppLayout />,
+    children: [
+      { index: true, element: <TaskListPage /> },
+      { path: 'calendar', element: <CalendarPage /> },
+      { path: 'tasks/new', element: <TaskFormPage /> },
+      { path: 'tasks/:taskId/edit', element: <TaskFormPage /> },
+      { path: 'activity', element: <ActivityPage /> },
+      { path: 'settings', element: <SettingsPage /> },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+]);
+
 function App() {
-  return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route index element={<TaskListPage />} />
-        <Route path="calendar" element={<CalendarPage />} />
-        <Route path="tasks/new" element={<TaskFormPage />} />
-        <Route path="tasks/:taskId/edit" element={<TaskFormPage />} />
-        <Route path="activity" element={<ActivityPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
-  );
+  return <RouterProvider router={router} />;
 }
 
 export default App;

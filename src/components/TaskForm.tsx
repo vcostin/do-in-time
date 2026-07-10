@@ -14,11 +14,63 @@ import {
 import * as chrono from 'chrono-node';
 import type { ParsedComponents } from 'chrono-node';
 import { DateTimeLocalFields } from './DateTimeLocalFields';
+import { deepEqual } from '../utils/deepEqual';
 
 interface TaskFormProps {
   initialTask: Task | null;
   onSubmit: (task: Task) => Promise<void>;
   onCancel: () => void;
+  /** Fires when dirty state changes (baseline vs current form values). */
+  onDirtyChange?: (dirty: boolean) => void;
+}
+
+type FormValues = {
+  name: string;
+  browser: BrowserType | '';
+  url: string;
+  allowCloseAll: boolean;
+  startTime: string;
+  closeTime: string;
+  timezone: string;
+  repeatEnabled: boolean;
+  repeatInterval: RepeatInterval;
+  repeatEndAfter: string;
+  repeatEndDate: string;
+};
+
+function emptyFormValues(): FormValues {
+  return {
+    name: '',
+    browser: '',
+    url: '',
+    allowCloseAll: false,
+    startTime: '',
+    closeTime: '',
+    timezone: getSystemTimeZone(),
+    repeatEnabled: false,
+    repeatInterval: RepeatInterval.Daily,
+    repeatEndAfter: '',
+    repeatEndDate: '',
+  };
+}
+
+function formValuesFromTask(task: Task): FormValues {
+  const tz = task.timezone || getSystemTimeZone();
+  return {
+    name: task.name,
+    browser: task.browser,
+    url: task.url || '',
+    allowCloseAll: task.allow_close_all || false,
+    startTime: task.start_time ? utcToZonedDatetimeString(task.start_time, tz) : '',
+    closeTime: task.close_time ? utcToZonedDatetimeString(task.close_time, tz) : '',
+    timezone: tz,
+    repeatEnabled: !!task.repeat_config,
+    repeatInterval: task.repeat_config?.interval || RepeatInterval.Daily,
+    repeatEndAfter: task.repeat_config?.end_after?.toString() || '',
+    repeatEndDate: task.repeat_config?.end_date
+      ? utcToZonedDatetimeString(task.repeat_config.end_date, tz)
+      : '',
+  };
 }
 
 const InfoTooltip = ({ text }: { text: string }) => (
@@ -74,7 +126,7 @@ function wallClockFromChrono(component: ParsedComponents): string {
   return `${year}-${month}-${day}T${hour}:${minute}`;
 }
 
-export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
+export function TaskForm({ initialTask, onSubmit, onCancel, onDirtyChange }: TaskFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [detectingBrowsers, setDetectingBrowsers] = useState(true);
   const [browserError, setBrowserError] = useState<string | null>(null);
@@ -82,24 +134,22 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
   const [defaultBrowser, setDefaultBrowser] = useState<BrowserType | null>(null);
   const [naturalLanguageTime, setNaturalLanguageTime] = useState('');
   const [nlError, setNlError] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    browser: '' as BrowserType | '',
-    url: '',
-    allowCloseAll: false,
-    startTime: '',
-    closeTime: '',
-    timezone: getSystemTimeZone(),
-    repeatEnabled: false,
-    repeatInterval: RepeatInterval.Daily,
-    repeatEndAfter: '',
-    repeatEndDate: '',
-  });
+  const [baseline, setBaseline] = useState<FormValues>(() =>
+    initialTask ? formValuesFromTask(initialTask) : emptyFormValues(),
+  );
+  const [formData, setFormData] = useState<FormValues>(() =>
+    initialTask ? formValuesFromTask(initialTask) : emptyFormValues(),
+  );
 
   const timezoneOptions = useMemo(
     () => scheduleTimezoneOptions(formData.timezone),
     [formData.timezone],
   );
+
+  // Dirty = current form values differ from the last loaded/reset baseline.
+  useEffect(() => {
+    onDirtyChange?.(!deepEqual(formData, baseline));
+  }, [formData, baseline, onDirtyChange]);
 
   // Detect installed browsers on mount
   useEffect(() => {
@@ -122,7 +172,9 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
             (defaultBr && ordered.includes(defaultBr) && defaultBr) ||
             ordered[0] ||
             '';
-          setFormData(prev => ({ ...prev, browser: preferred }));
+          // Programmatic default: keep working copy and baseline in sync.
+          setFormData((prev) => ({ ...prev, browser: preferred }));
+          setBaseline((prev) => ({ ...prev, browser: preferred }));
         }
 
         if (ordered.length === 0) {
@@ -142,26 +194,11 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
 
   useEffect(() => {
     if (initialTask) {
-      const tz = initialTask.timezone || getSystemTimeZone();
-      setFormData({
-        name: initialTask.name,
-        browser: initialTask.browser,
-        url: initialTask.url || '',
-        allowCloseAll: initialTask.allow_close_all || false,
-        startTime: initialTask.start_time
-          ? utcToZonedDatetimeString(initialTask.start_time, tz)
-          : '',
-        closeTime: initialTask.close_time
-          ? utcToZonedDatetimeString(initialTask.close_time, tz)
-          : '',
-        timezone: tz,
-        repeatEnabled: !!initialTask.repeat_config,
-        repeatInterval: initialTask.repeat_config?.interval || RepeatInterval.Daily,
-        repeatEndAfter: initialTask.repeat_config?.end_after?.toString() || '',
-        repeatEndDate: initialTask.repeat_config?.end_date
-          ? utcToZonedDatetimeString(initialTask.repeat_config.end_date, tz)
-          : '',
-      });
+      const values = formValuesFromTask(initialTask);
+      setBaseline(values);
+      setFormData(values);
+      setNaturalLanguageTime('');
+      setNlError(null);
     }
   }, [initialTask]);
 
@@ -195,7 +232,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
 
       const scheduleTz = resolved.iana;
       const startUtc = parsed.start.date().toISOString();
-      const updates: Partial<typeof formData> = {
+      const updates: Partial<FormValues> = {
         timezone: scheduleTz,
         startTime: utcToZonedDatetimeString(startUtc, scheduleTz),
       };
@@ -291,7 +328,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           type="text"
           required
           value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           placeholder="e.g., Open Chrome for work"
         />
@@ -307,7 +344,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
             required
             disabled={detectingBrowsers || installedBrowsers.length === 0}
             value={formData.browser}
-            onChange={(e) => setFormData({ ...formData, browser: e.target.value as BrowserType })}
+            onChange={(e) => setFormData((prev) => ({ ...prev, browser: e.target.value as BrowserType }))}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
           >
             {detectingBrowsers && <option value="">Detecting installed browsers...</option>}
@@ -340,7 +377,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         <input
           type="url"
           value={formData.url}
-          onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+          onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           placeholder="https://example.com"
         />
@@ -353,7 +390,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         </label>
         <select
           value={formData.timezone}
-          onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+          onChange={(e) => setFormData((prev) => ({ ...prev, timezone: e.target.value }))}
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
         >
           {timezoneOptions.map((tz) => (
@@ -396,7 +433,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         <DateTimeLocalFields
           required
           value={formData.startTime}
-          onChange={(startTime) => setFormData({ ...formData, startTime })}
+          onChange={(startTime) => setFormData((prev) => ({ ...prev, startTime }))}
         />
       </div>
 
@@ -407,7 +444,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         </label>
         <DateTimeLocalFields
           value={formData.closeTime}
-          onChange={(closeTime) => setFormData({ ...formData, closeTime })}
+          onChange={(closeTime) => setFormData((prev) => ({ ...prev, closeTime }))}
         />
       </div>
 
@@ -416,7 +453,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           <input
             type="checkbox"
             checked={formData.allowCloseAll}
-            onChange={(e) => setFormData({ ...formData, allowCloseAll: e.target.checked })}
+            onChange={(e) => setFormData((prev) => ({ ...prev, allowCloseAll: e.target.checked }))}
             className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
           />
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -431,7 +468,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           <input
             type="checkbox"
             checked={formData.repeatEnabled}
-            onChange={(e) => setFormData({ ...formData, repeatEnabled: e.target.checked })}
+            onChange={(e) => setFormData((prev) => ({ ...prev, repeatEnabled: e.target.checked }))}
             className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
           />
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -450,7 +487,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
             </label>
             <select
               value={formData.repeatInterval}
-              onChange={(e) => setFormData({ ...formData, repeatInterval: e.target.value as RepeatInterval })}
+              onChange={(e) => setFormData((prev) => ({ ...prev, repeatInterval: e.target.value as RepeatInterval }))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
             >
               <option value={RepeatInterval.Daily}>Daily</option>
@@ -468,7 +505,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
               type="number"
               min="1"
               value={formData.repeatEndAfter}
-              onChange={(e) => setFormData({ ...formData, repeatEndAfter: e.target.value })}
+              onChange={(e) => setFormData((prev) => ({ ...prev, repeatEndAfter: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
               placeholder="e.g., 10"
             />
@@ -481,7 +518,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
             </label>
             <DateTimeLocalFields
               value={formData.repeatEndDate}
-              onChange={(repeatEndDate) => setFormData({ ...formData, repeatEndDate })}
+              onChange={(repeatEndDate) => setFormData((prev) => ({ ...prev, repeatEndDate }))}
             />
           </div>
         </div>

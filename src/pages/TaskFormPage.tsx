@@ -1,17 +1,47 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useBlocker, useNavigate, useParams } from 'react-router-dom';
 import { useTasks } from '../hooks/useTasks';
 import { TaskForm } from '../components/TaskForm';
 import { PageHeader } from '../components/PageHeader';
+import { ConfirmLeaveModal } from '../components/ConfirmLeaveModal';
 import { Task } from '../types/task';
 
 export function TaskFormPage() {
   const navigate = useNavigate();
   const { taskId } = useParams();
   const { tasks, loading, createTask, updateTask } = useTasks();
+  const [isDirty, setIsDirty] = useState(false);
+  const isDirtyRef = useRef(false);
 
   const editingId = taskId != null ? Number(taskId) : null;
   const isEdit = editingId != null && !Number.isNaN(editingId);
   const editingTask = isEdit ? tasks.find((t) => t.id === editingId) ?? null : null;
+
+  const setDirty = useCallback((dirty: boolean) => {
+    isDirtyRef.current = dirty;
+    setIsDirty(dirty);
+  }, []);
+
+  useEffect(() => {
+    setDirty(false);
+  }, [taskId, editingTask?.id, setDirty]);
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isDirtyRef.current && currentLocation.pathname !== nextLocation.pathname,
+  );
+
+  useEffect(() => {
+    if (!isDirty) {
+      return;
+    }
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
 
   const handleSubmit = async (task: Task) => {
     try {
@@ -20,6 +50,7 @@ export function TaskFormPage() {
       } else {
         await createTask(task);
       }
+      setDirty(false);
       navigate(-1);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save task');
@@ -67,8 +98,16 @@ export function TaskFormPage() {
           initialTask={editingTask}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
+          onDirtyChange={setDirty}
         />
       </div>
+
+      {blocker.state === 'blocked' && (
+        <ConfirmLeaveModal
+          onStay={() => blocker.reset?.()}
+          onLeave={() => blocker.proceed?.()}
+        />
+      )}
     </div>
   );
 }
