@@ -83,7 +83,12 @@ pub fn next_future_occurrence(
 
 /// Schedule the next open (and matching close) for a repeating task whose
 /// `start_time` may already be in the past.
+///
+/// For one-shot tasks with no remaining future open/close, sets status to
+/// `Completed` when the task was `Active` (avoids zombie Active cards).
 pub fn schedule_next_open_close(task: &mut Task, now: DateTime<Utc>) -> Result<()> {
+    use crate::db::TaskStatus;
+
     if task.repeat_config.is_none() {
         if task.start_time > now {
             task.next_open_execution = Some(task.start_time);
@@ -100,6 +105,14 @@ pub fn schedule_next_open_close(task: &mut Task, now: DateTime<Utc>) -> Result<(
         } else {
             task.next_close_execution = None;
         }
+
+        if task.next_open_execution.is_none()
+            && task.next_close_execution.is_none()
+            && task.status == TaskStatus::Active
+        {
+            task.status = TaskStatus::Completed;
+        }
+
         return Ok(());
     }
 
@@ -185,5 +198,60 @@ mod tests {
             task.next_close_execution,
             Some(Utc.with_ymd_and_hms(2026, 1, 4, 11, 0, 0).unwrap())
         );
+    }
+
+    #[test]
+    fn past_one_shot_becomes_completed() {
+        let start = Utc.with_ymd_and_hms(2020, 1, 1, 9, 0, 0).unwrap();
+        let mut task = Task {
+            id: Some(1),
+            name: "past".into(),
+            browser: BrowserType::Firefox,
+            browser_profile: None,
+            url: None,
+            allow_close_all: false,
+            start_time: start,
+            close_time: Some(start + Duration::hours(1)),
+            timezone: "UTC".into(),
+            repeat_config: None,
+            execution_count: 0,
+            status: TaskStatus::Active,
+            next_open_execution: Some(start),
+            next_close_execution: Some(start + Duration::hours(1)),
+            last_error: None,
+            last_execution_at: None,
+        };
+        let now = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert!(task.next_open_execution.is_none());
+        assert!(task.next_close_execution.is_none());
+        assert_eq!(task.status, TaskStatus::Completed);
+    }
+
+    #[test]
+    fn future_one_shot_stays_active() {
+        let start = Utc.with_ymd_and_hms(2030, 1, 1, 9, 0, 0).unwrap();
+        let mut task = Task {
+            id: Some(1),
+            name: "future".into(),
+            browser: BrowserType::Firefox,
+            browser_profile: None,
+            url: None,
+            allow_close_all: false,
+            start_time: start,
+            close_time: None,
+            timezone: "UTC".into(),
+            repeat_config: None,
+            execution_count: 0,
+            status: TaskStatus::Active,
+            next_open_execution: Some(start),
+            next_close_execution: None,
+            last_error: None,
+            last_execution_at: None,
+        };
+        let now = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert_eq!(task.next_open_execution, Some(start));
+        assert_eq!(task.status, TaskStatus::Active);
     }
 }

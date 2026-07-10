@@ -21,6 +21,10 @@ pub enum AppError {
     #[error("Scheduler error: {0}")]
     Scheduler(String),
 
+    /// Best-effort close found no matching window/tab; not a hard task failure.
+    #[error("{0}")]
+    CloseTargetNotFound(String),
+
     #[error("Invalid task configuration: {0}")]
     InvalidTask(String),
 
@@ -29,6 +33,12 @@ pub enum AppError {
 
     #[error("Not running")]
     NotRunning,
+}
+
+impl AppError {
+    pub fn is_soft_close_miss(&self) -> bool {
+        matches!(self, AppError::CloseTargetNotFound(_))
+    }
 }
 
 pub type Result<T> = std::result::Result<T, AppError>;

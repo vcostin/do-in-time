@@ -54,6 +54,19 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - `disabled` status; scheduler ignores disabled tasks
 - **Pause** / **Resume** / **Retry** controls on the task card
 
+### Softer close-failure handling
+
+**Status:** `done`  
+- Soft close misses (`CloseTargetNotFound`) log the miss and clear the close slot
+- Repeating tasks stay Active; one-shots with nothing left become Completed
+- Hard open/close failures still mark Failed
+
+### Fix past one-shot “zombie” Active tasks
+
+**Status:** `done`  
+- `schedule_next_open_close` marks past one-shots with no next open/close as `Completed`
+- `create_task` no longer forces Active over Completed
+
 ---
 
 ## Planned
@@ -71,32 +84,6 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 **Acceptance:**
 - Close/kill paths do not intentionally target other browsers or unrelated processes
 - Missing tools / unsupported environments surface a clear error, not a silent no-op
-
-### Softer close-failure handling
-
-**Status:** `planned`  
-**Today:** Any failed open/close marks the task `Failed`, which stops repeating schedules until Retry—even when close is best-effort and expected to miss (no matching title, Wayland, tools missing).
-
-**Future:**
-- Distinguish hard failures (open/launch) from soft close misses
-- Keep repeating tasks active when close cannot find a target; log the miss
-- Surface “close may not work on this platform” before save when relevant
-
-**Acceptance:**
-- A missed close does not strand an otherwise healthy repeating task
-- Users can see why close did nothing without needing Retry to continue opens
-
-### Fix past one-shot “zombie” Active tasks
-
-**Status:** `planned`  
-**Today:** Creating a non-repeating task with `start_time` in the past clears `next_open_execution` but still leaves status `Active`, so the card looks live and never runs.
-
-**Future:**
-- On create/update, mark past one-shots `Completed` (or reject / warn in the form)
-- Optionally offer “run once now” when the scheduled time is already past
-
-**Acceptance:**
-- No Active task exists with neither a next open nor a next close
 
 ### Reschedule when repeat config changes
 
@@ -239,4 +226,4 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
 - **Close (Win/Linux tab):** remains `on-hold` — no clear resolve yet (CDP / extension / native messaging still undecided). Ship safer scoping and soft close-miss handling when useful; do not promise true tab close until a path is chosen.
-- **Next iteration priority (suggested):** soft close failures + zombie/reschedule fixes → tests → UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish.
+- **Next iteration priority (suggested):** reschedule-on-repeat-edit → tests → UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish.

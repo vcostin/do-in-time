@@ -17,7 +17,8 @@ impl Database {
         }
 
         schedule_next_open_close(&mut task, Utc::now())?;
-        if task.status != TaskStatus::Disabled {
+        // Do not force Active over Completed (past one-shots) or Disabled.
+        if task.status != TaskStatus::Disabled && task.status != TaskStatus::Completed {
             task.status = TaskStatus::Active;
         }
 

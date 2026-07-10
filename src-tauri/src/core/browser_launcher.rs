@@ -256,7 +256,7 @@ impl BrowserLauncher {
                 return self.close_browser(browser).await;
             }
 
-            Err(AppError::Scheduler(format!(
+            Err(AppError::CloseTargetNotFound(format!(
                 "Could not find a {} window whose title contains '{}'. \
                  Enable 'Allow close all browser instances' to terminate all {} processes as a fallback.",
                 browser, needle, browser

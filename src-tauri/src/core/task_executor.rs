@@ -1,6 +1,6 @@
 use crate::core::browser_launcher::BrowserLauncher;
 use crate::db::{Database, ExecutionAction, Task, TaskStatus};
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::utils::schedule::next_future_occurrence;
 use crate::utils::validation::{validate_browser_profile, validate_url};
 use chrono::Utc;
@@ -39,48 +39,7 @@ impl TaskExecutor {
                 }
 
                 task.clear_last_error();
-
-                if let Some(repeat_config) = &task.repeat_config {
-                    match action {
-                        ExecutionAction::Open => {
-                            let base = task.next_open_execution.unwrap_or(task.start_time);
-                            let next = next_future_occurrence(&task, base, Utc::now())?;
-
-                            let should_continue =
-                                self.should_continue_repeating(&task, next, repeat_config);
-
-                            if should_continue {
-                                task.next_open_execution = Some(next);
-                                if let Some(close_time) = task.close_time {
-                                    let time_diff =
-                                        close_time.signed_duration_since(task.start_time);
-                                    task.next_close_execution = Some(next + time_diff);
-                                }
-                                task.status = TaskStatus::Active;
-                            } else {
-                                task.next_open_execution = None;
-                                task.next_close_execution = None;
-                                task.status = TaskStatus::Completed;
-                            }
-                        }
-                        ExecutionAction::Close => {
-                            task.next_close_execution = None;
-                        }
-                    }
-                } else {
-                    match action {
-                        ExecutionAction::Open => {
-                            task.next_open_execution = None;
-                            if task.close_time.is_none() {
-                                task.status = TaskStatus::Completed;
-                            }
-                        }
-                        ExecutionAction::Close => {
-                            task.next_close_execution = None;
-                            task.status = TaskStatus::Completed;
-                        }
-                    }
-                }
+                self.apply_success_schedule(&mut task, &action)?;
 
                 let _ = self
                     .db
@@ -89,6 +48,28 @@ impl TaskExecutor {
                 self.db.save_task_runtime(&task).await?;
                 let _ = self.app_handle.emit("task-updated", task_id);
                 self.send_notification_if_enabled(&task, &action, None)
+                    .await;
+
+                Ok(())
+            }
+            Err(e) if action == ExecutionAction::Close && e.is_soft_close_miss() => {
+                let message = e.to_string();
+                // Consume this close slot so we do not tight-loop; keep the task schedulable.
+                task.next_close_execution = None;
+                if task.repeat_config.is_none() && task.next_open_execution.is_none() {
+                    task.status = TaskStatus::Completed;
+                } else if task.status != TaskStatus::Disabled {
+                    task.status = TaskStatus::Active;
+                }
+                task.set_last_error(&format!("Close missed: {message}"));
+
+                let _ = self
+                    .db
+                    .add_execution_log(task_id, &action, false, Some(&message))
+                    .await;
+                let _ = self.db.save_task_runtime(&task).await;
+                let _ = self.app_handle.emit("task-updated", task_id);
+                self.send_notification_if_enabled(&task, &action, Some(&message))
                     .await;
 
                 Ok(())
@@ -110,6 +91,49 @@ impl TaskExecutor {
                 Err(e)
             }
         }
+    }
+
+    fn apply_success_schedule(&self, task: &mut Task, action: &ExecutionAction) -> Result<()> {
+        if let Some(repeat_config) = &task.repeat_config {
+            match action {
+                ExecutionAction::Open => {
+                    let base = task.next_open_execution.unwrap_or(task.start_time);
+                    let next = next_future_occurrence(task, base, Utc::now())?;
+
+                    let should_continue = self.should_continue_repeating(task, next, repeat_config);
+
+                    if should_continue {
+                        task.next_open_execution = Some(next);
+                        if let Some(close_time) = task.close_time {
+                            let time_diff = close_time.signed_duration_since(task.start_time);
+                            task.next_close_execution = Some(next + time_diff);
+                        }
+                        task.status = TaskStatus::Active;
+                    } else {
+                        task.next_open_execution = None;
+                        task.next_close_execution = None;
+                        task.status = TaskStatus::Completed;
+                    }
+                }
+                ExecutionAction::Close => {
+                    task.next_close_execution = None;
+                }
+            }
+        } else {
+            match action {
+                ExecutionAction::Open => {
+                    task.next_open_execution = None;
+                    if task.close_time.is_none() {
+                        task.status = TaskStatus::Completed;
+                    }
+                }
+                ExecutionAction::Close => {
+                    task.next_close_execution = None;
+                    task.status = TaskStatus::Completed;
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn run_action(&self, task: &Task, action: &ExecutionAction) -> Result<()> {
@@ -138,7 +162,7 @@ impl TaskExecutor {
                 } else if task.allow_close_all {
                     self.browser_launcher.close_browser(&task.browser).await
                 } else {
-                    Err(crate::error::AppError::InvalidTask(
+                    Err(AppError::InvalidTask(
                         "Close without URL is blocked unless 'allow_close_all' is enabled for this task"
                             .to_string(),
                     ))
@@ -176,10 +200,17 @@ impl TaskExecutor {
         }
 
         let (title, body) = if let Some(err) = error {
-            (
-                format!("Task failed: {}", task.name),
-                format!("{} — {}", action, err),
-            )
+            if err.contains("Could not find") || err.starts_with("Close missed:") {
+                (
+                    format!("Close missed: {}", task.name),
+                    format!("{} — {}", action, err),
+                )
+            } else {
+                (
+                    format!("Task failed: {}", task.name),
+                    format!("{} — {}", action, err),
+                )
+            }
         } else {
             let action_text = match action {
                 ExecutionAction::Open => "opened",
