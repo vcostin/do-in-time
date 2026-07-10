@@ -184,7 +184,7 @@ The scheduler starts automatically on application launch. You can:
 
 ## Database Schema
 
-Tasks are stored locally in SQLite with the following structure:
+Tasks and settings are stored locally in SQLite. Current shape (see `src-tauri/src/db/schema.rs`):
 
 ```sql
 CREATE TABLE tasks (
@@ -193,21 +193,42 @@ CREATE TABLE tasks (
     browser TEXT NOT NULL,
     browser_profile TEXT,
     url TEXT,
+    allow_close_all INTEGER NOT NULL DEFAULT 0,
     start_time TEXT NOT NULL,
     close_time TEXT,
     timezone TEXT NOT NULL,
     repeat_interval TEXT,
     repeat_end_after INTEGER,
     repeat_end_date TEXT,
-    status TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    last_open_execution TEXT,
-    last_close_execution TEXT,
+    execution_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'failed', 'disabled')),
     next_open_execution TEXT,
-    next_close_execution TEXT
+    next_close_execution TEXT,
+    last_error TEXT,
+    last_execution_at TEXT
+);
+
+CREATE TABLE task_execution_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    success INTEGER NOT NULL,
+    message TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE schema_migrations (
+    version INTEGER PRIMARY KEY
 );
 ```
+
+Schema upgrades run on startup via `schema_migrations` (for example adding `last_error` / `disabled` on older databases).
 
 ## Database Location
 
@@ -234,6 +255,7 @@ do-in-time/
 │   │   ├── db/             # Database layer
 │   │   └── utils/          # Utility modules
 │   └── icons/              # Application icons
+├── BACKLOG.md               # Deferred / on-hold work
 └── README.md
 ```
 
@@ -258,9 +280,10 @@ cargo test
 
 ### Task Not Executing
 - Verify the scheduler is running (green indicator)
-- Check task status - it should be "Active"
-- Ensure the scheduled time is in the future
-- Check application logs / notifications for error messages
+- Check task status — it should be **Active** (not Disabled, Failed, or Completed)
+- Ensure the next open/close time is in the future (or use **Retry** after a failure)
+- On the task card, check **Last error** and expand **Log** for recent open/close attempts
+- If notifications are enabled in Settings, failure alerts include the error message
 
 ### Database Issues
 If you encounter database errors:
