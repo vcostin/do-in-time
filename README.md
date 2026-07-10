@@ -100,6 +100,11 @@ cargo tauri build
 # or: npm run tauri build
 ```
 
+Linux packages default to `.deb` and `.rpm`. AppImage is omitted because Arch’s
+gdk-pixbuf 2.44+ (glycin) no longer provides the classic loaders tree that
+Tauri’s linuxdeploy GTK plugin expects; that broke after it used to work on
+older gdk-pixbuf. To force an AppImage anyway: `deno task tauri build -- --bundles appimage`.
+
 The built application will be in `src-tauri/target/release/`.
 
 ### Frontend-only (Vite)

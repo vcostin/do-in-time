@@ -115,6 +115,23 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 
 ## Planned
 
+### Re-enable Linux AppImage bundling
+
+**Status:** `planned`  
+**Today:** `bundle.targets` is `["deb", "rpm"]` only. AppImage used to build, then started failing on Arch after **gdk-pixbuf 2.44+** switched to **glycin** and stopped shipping `/usr/lib/gdk-pixbuf-2.0/2.10.0`. Tauri’s `linuxdeploy-plugin-gtk` still `cp`s that tree and exits. (`fuse2` is unrelated — it only affects mounting AppImages; Tauri already sets `APPIMAGE_EXTRACT_AND_RUN`.)
+
+**Check later (upstream fixed?):**
+- Does `deno task tauri build -- --bundles appimage` succeed on current Arch without patching `~/.cache/tauri/linuxdeploy-plugin-gtk.sh`?
+- Relevant pieces: [linuxdeploy-plugin-gtk](https://github.com/linuxdeploy/linuxdeploy-plugin-gtk) / [tauri fork](https://github.com/tauri-apps/linuxdeploy-plugin-gtk), gdk-pixbuf ≥ 2.44 + glycin, Tauri bundler AppImage path
+
+**When unblocked:**
+- Restore AppImage in `bundle.targets` (e.g. `"all"` or add `"appimage"`)
+- Drop the README note that AppImage is omitted for this reason
+
+**Acceptance:**
+- Default `tauri build` produces a working AppImage on Arch without local plugin hacks
+- `.deb` / `.rpm` keep working
+
 ### Harden Linux / Windows close scoping
 
 **Status:** `planned`  
