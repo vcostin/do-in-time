@@ -1,14 +1,20 @@
 use crate::db::connection::Database;
 use crate::db::models::*;
 use crate::error::{AppError, Result};
-use crate::utils::schedule::{schedule_inputs_changed, schedule_next_open_close};
-use crate::utils::validation::{validate_browser_profile, validate_url};
+use crate::utils::schedule::{
+    schedule_inputs_changed, schedule_next_open_close, schedule_next_open_close_preserving_session,
+};
+use crate::utils::validation::{
+    normalize_timezone, validate_browser_profile, validate_task_times, validate_url,
+};
 use chrono::Utc;
 use sqlx::Row;
 use std::str::FromStr;
 
 impl Database {
     pub async fn create_task(&self, mut task: Task) -> Result<Task> {
+        task.timezone = normalize_timezone(&task.timezone)?;
+        validate_task_times(&task)?;
         if let Some(ref url) = task.url {
             validate_url(url)?;
         }
@@ -120,6 +126,8 @@ impl Database {
     }
 
     pub async fn update_task(&self, id: i64, mut task: Task) -> Result<Task> {
+        task.timezone = normalize_timezone(&task.timezone)?;
+        validate_task_times(&task)?;
         if let Some(ref url) = task.url {
             validate_url(url)?;
         }
@@ -217,7 +225,7 @@ impl Database {
             }
             task.status = TaskStatus::Active;
             task.last_error = None;
-            schedule_next_open_close(&mut task, Utc::now())?;
+            schedule_next_open_close_preserving_session(&mut task, Utc::now())?;
         }
 
         self.write_task_row(id, &task).await?;

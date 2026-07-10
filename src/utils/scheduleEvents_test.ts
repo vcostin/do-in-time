@@ -43,6 +43,27 @@ Deno.test('addOneInterval daily preserves America/New_York wall clock across DST
   assertEquals(next.toISOString(), '2026-03-08T13:00:00.000Z'); // 09:00 EDT
 });
 
+Deno.test('addOneInterval weekly preserves America/New_York wall clock across DST', () => {
+  // 2026-03-01 09:00 EST → 2026-03-08 09:00 EDT
+  const start = '2026-03-01T14:00:00.000Z';
+  const next = addOneInterval(start, 'weekly', 'America/New_York');
+  assertEquals(next.toISOString(), '2026-03-08T13:00:00.000Z');
+});
+
+Deno.test('addOneInterval daily preserves America/New_York wall clock across fall back', () => {
+  // 2026-10-31 09:00 EDT → 2026-11-01 09:00 EST
+  const start = '2026-10-31T13:00:00.000Z';
+  const next = addOneInterval(start, 'daily', 'America/New_York');
+  assertEquals(next.toISOString(), '2026-11-01T14:00:00.000Z');
+});
+
+Deno.test('addOneInterval daily snaps past America/New_York spring gap', () => {
+  // 2026-03-07 02:30 EST → next day gap 02:30 → first valid 03:00 EDT
+  const start = '2026-03-07T07:30:00.000Z';
+  const next = addOneInterval(start, 'daily', 'America/New_York');
+  assertEquals(next.toISOString(), '2026-03-08T07:00:00.000Z');
+});
+
 function dailyTask(overrides: Partial<ScheduleTaskInput> = {}): ScheduleTaskInput {
   return {
     id: 1,
@@ -92,6 +113,27 @@ Deno.test('expandScheduleEvents respects end_after remaining opens', () => {
   const opens = events.filter((e) => e.action === 'open');
   // end_after 3, already executed 1 → 2 opens left
   assertEquals(opens.length, 2);
+});
+
+Deno.test('expandScheduleEvents emits mid-session pending close before next open', () => {
+  const rangeStart = new Date('2026-07-10T00:00:00.000Z');
+  const rangeEnd = new Date('2026-07-12T00:00:00.000Z');
+  const events = expandScheduleEvents(
+    [
+      dailyTask({
+        // Open already fired; close still due today; next open tomorrow.
+        next_open_execution: '2026-07-11T13:00:00.000Z',
+        next_close_execution: '2026-07-10T15:00:00.000Z',
+        execution_count: 1,
+      }),
+    ],
+    rangeStart,
+    rangeEnd,
+  );
+  const closes = events.filter((e) => e.action === 'close').map((e) => e.atIso);
+  assertEquals(closes.includes('2026-07-10T15:00:00.000Z'), true);
+  const opens = events.filter((e) => e.action === 'open').map((e) => e.atIso);
+  assertEquals(opens[0], '2026-07-11T13:00:00.000Z');
 });
 
 Deno.test('expandScheduleEvents one-shot only emits next_*', () => {

@@ -1,26 +1,52 @@
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 
-/**
- * Converts a UTC ISO string to machine-local datetime-local format (YYYY-MM-DDTHH:mm).
- * Prefer utcToZonedDatetimeString when the schedule timezone is known.
- */
-export function utcToLocalDatetimeString(utcIsoString: string): string {
-  const date = new Date(utcIsoString);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
+function ensureSeconds(wall: string): string {
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(wall)) {
+    return `${wall}:00`;
+  }
+  return wall;
+}
 
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+function pad(n: number, width: number): string {
+  return String(n).padStart(width, '0');
+}
+
+/** Advance a wall `YYYY-MM-DDTHH:mm:ss` by one minute (calendar-naive). */
+function addOneMinuteToWall(wall: string): string {
+  const [datePart, timePart = '00:00:00'] = wall.split('T');
+  const [y, m, d] = datePart.split('-').map(Number);
+  const [hh, mm, ss] = timePart.split(':').map(Number);
+  const utc = Date.UTC(y, m - 1, d, hh, mm, ss || 0);
+  const next = new Date(utc + 60_000);
+  return `${pad(next.getUTCFullYear(), 4)}-${pad(next.getUTCMonth() + 1, 2)}-${pad(next.getUTCDate(), 2)}T${pad(next.getUTCHours(), 2)}:${pad(next.getUTCMinutes(), 2)}:${pad(next.getUTCSeconds(), 2)}`;
 }
 
 /**
- * Converts a machine-local datetime-local string to UTC ISO.
- * Prefer zonedDatetimeStringToUtc when the schedule timezone is known.
+ * Convert a schedule-zone wall clock to a UTC Date.
+ * Round-trips through the zone so DST gaps are detected.
+ * When `snapGap` is true, advances minute-by-minute to the next valid local time
+ * (mirrors Rust `at_wall_clock_on`).
  */
-export function localDatetimeStringToUtc(localDatetimeString: string): string {
-  return new Date(localDatetimeString).toISOString();
+export function wallToUtc(
+  wall: string,
+  timeZone: string,
+  options: { snapGap?: boolean } = {},
+): Date {
+  let candidate = ensureSeconds(wall);
+  for (let i = 0; i < 180; i++) {
+    const utc = fromZonedTime(candidate, timeZone);
+    const back = formatInTimeZone(utc, timeZone, "yyyy-MM-dd'T'HH:mm:ss");
+    if (back === candidate) {
+      return utc;
+    }
+    if (!options.snapGap) {
+      throw new Error(
+        `Nonexistent local time (DST gap): ${wall} in ${timeZone}`,
+      );
+    }
+    candidate = addOneMinuteToWall(candidate);
+  }
+  throw new Error(`Could not resolve local time near ${wall} in ${timeZone}`);
 }
 
 /** Wall-clock datetime-local string in an IANA zone from a UTC instant. */
@@ -30,7 +56,20 @@ export function utcToZonedDatetimeString(utcIsoString: string, timeZone: string)
 
 /** Interpret a datetime-local wall clock in an IANA zone as a UTC ISO string. */
 export function zonedDatetimeStringToUtc(localDatetimeString: string, timeZone: string): string {
-  return fromZonedTime(localDatetimeString, timeZone).toISOString();
+  return wallToUtc(localDatetimeString, timeZone, { snapGap: false }).toISOString();
+}
+
+/**
+ * Build a Date whose local Y/M/D/H/M/S match "now" in `timeZone`.
+ * Used as chrono-node's reference so relative phrases like "tomorrow" follow
+ * the schedule zone's calendar, not the machine's.
+ */
+export function referenceDateInZone(timeZone: string, instant: Date = new Date()): Date {
+  const wall = formatInTimeZone(instant, timeZone, "yyyy-MM-dd'T'HH:mm:ss");
+  const [datePart, timePart = '00:00:00'] = wall.split('T');
+  const [y, m, d] = datePart.split('-').map(Number);
+  const [hh, mm, ss] = timePart.split(':').map(Number);
+  return new Date(y, m - 1, d, hh, mm, ss || 0);
 }
 
 /** Formats a UTC ISO string for display in the operator's local timezone. */

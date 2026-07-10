@@ -1,4 +1,5 @@
-import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
+import { formatInTimeZone } from 'date-fns-tz';
+import { wallToUtc } from './datetime';
 
 export type ScheduleAction = 'open' | 'close';
 export type ScheduleInterval = 'daily' | 'weekly' | 'monthly';
@@ -104,6 +105,7 @@ export const TASK_COLOR_CLASSES: Array<{
 
 /**
  * Advance by one repeat interval in the task timezone (mirrors Rust `add_one_interval`).
+ * Uses calendar days in the zone so wall clock is preserved across DST.
  */
 export function addOneInterval(
   utcIsoOrDate: string | Date,
@@ -146,7 +148,8 @@ export function addOneInterval(
   }
 
   const nextWall = `${pad(nextY, 4)}-${pad(nextM, 2)}-${pad(nextD, 2)}T${pad(hh, 2)}:${pad(mm, 2)}:${pad(ss, 2)}`;
-  return fromZonedTime(nextWall, timeZone);
+  // Snap past DST spring gaps so calendar expansion matches Rust scheduling.
+  return wallToUtc(nextWall, timeZone, { snapGap: true });
 }
 
 function daysInMonth(year: number, month: number): number {
@@ -230,31 +233,44 @@ export function expandScheduleEvents(
     let openAt: Date | null = task.next_open_execution
       ? new Date(task.next_open_execution)
       : null;
+
+    // Mid-session close: open already fired, close still pending before next open.
+    if (task.next_close_execution) {
+      const pendingClose = new Date(task.next_close_execution);
+      if (
+        !Number.isNaN(pendingClose.getTime()) &&
+        (!openAt || Number.isNaN(openAt.getTime()) || pendingClose < openAt)
+      ) {
+        pushEvent(events, task, 'close', pendingClose, rangeStart, rangeEnd);
+      }
+    }
+
     if (!openAt || Number.isNaN(openAt.getTime())) {
       continue;
     }
 
+    let walkOpen: Date = openAt;
     const maxOpens =
       endAfter != null ? Math.max(0, endAfter - task.execution_count) : Number.POSITIVE_INFINITY;
     let opensShown = 0;
 
     // Bound iterations for safety (daily for ~3 years)
     for (let i = 0; i < 1200 && opensShown < maxOpens; i++) {
-      if (openAt >= rangeEnd) {
+      if (walkOpen >= rangeEnd) {
         break;
       }
-      if (endDate && !Number.isNaN(endDate.getTime()) && openAt >= endDate) {
+      if (endDate && !Number.isNaN(endDate.getTime()) && walkOpen >= endDate) {
         break;
       }
 
-      if (openAt >= rangeStart) {
-        pushEvent(events, task, 'open', openAt, rangeStart, rangeEnd);
+      if (walkOpen >= rangeStart) {
+        pushEvent(events, task, 'open', walkOpen, rangeStart, rangeEnd);
         if (offset != null) {
           pushEvent(
             events,
             task,
             'close',
-            new Date(openAt.getTime() + offset),
+            new Date(walkOpen.getTime() + offset),
             rangeStart,
             rangeEnd,
           );
@@ -265,7 +281,7 @@ export function expandScheduleEvents(
           events,
           task,
           'close',
-          new Date(openAt.getTime() + offset),
+          new Date(walkOpen.getTime() + offset),
           rangeStart,
           rangeEnd,
         );
@@ -276,26 +292,10 @@ export function expandScheduleEvents(
         break;
       }
 
-      openAt = addOneInterval(openAt, task.repeat_config.interval, tz);
-      if (endDate && !Number.isNaN(endDate.getTime()) && openAt >= endDate) {
+      walkOpen = addOneInterval(walkOpen, task.repeat_config.interval, tz);
+      if (endDate && !Number.isNaN(endDate.getTime()) && walkOpen >= endDate) {
         break;
       }
-    }
-
-    // Close-only leftover when open already passed but close remains (rare for repeats)
-    if (
-      !task.next_open_execution &&
-      task.next_close_execution &&
-      opensShown === 0
-    ) {
-      pushEvent(
-        events,
-        task,
-        'close',
-        new Date(task.next_close_execution),
-        rangeStart,
-        rangeEnd,
-      );
     }
   }
 

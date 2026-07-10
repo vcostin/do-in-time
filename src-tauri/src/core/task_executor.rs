@@ -1,7 +1,7 @@
 use crate::core::browser_launcher::BrowserLauncher;
-use crate::db::{Database, ExecutionAction, RepeatConfig, Task, TaskStatus};
+use crate::db::{Database, ExecutionAction, Task, TaskStatus};
 use crate::error::{AppError, Result};
-use crate::utils::schedule::next_future_occurrence;
+use crate::utils::schedule::{next_future_occurrence, should_schedule_occurrence};
 use crate::utils::validation::{validate_browser_profile, validate_url};
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
@@ -192,29 +192,39 @@ pub(crate) fn apply_success_schedule(
     action: &ExecutionAction,
     now: DateTime<Utc>,
 ) -> Result<()> {
-    if let Some(repeat_config) = task.repeat_config.clone() {
+    if task.repeat_config.is_some() {
         match action {
             ExecutionAction::Open => {
-                let base = task.next_open_execution.unwrap_or(task.start_time);
-                let next = next_future_occurrence(task, base, now)?;
+                // The open that just fired — its close must still run this session.
+                let fired = task.next_open_execution.unwrap_or(task.start_time);
+                let next = next_future_occurrence(task, fired, now)?;
+                let continue_opens = should_schedule_occurrence(task, next);
 
-                let should_continue = should_continue_repeating(task, next, &repeat_config);
+                task.next_open_execution = if continue_opens { Some(next) } else { None };
 
-                if should_continue {
-                    task.next_open_execution = Some(next);
-                    if let Some(close_time) = task.close_time {
-                        let time_diff = close_time.signed_duration_since(task.start_time);
-                        task.next_close_execution = Some(next + time_diff);
-                    }
-                    task.status = TaskStatus::Active;
+                if let Some(close_time) = task.close_time {
+                    let time_diff = close_time.signed_duration_since(task.start_time);
+                    let close_for_fired = fired + time_diff;
+                    task.next_close_execution = if close_for_fired > now {
+                        Some(close_for_fired)
+                    } else {
+                        None
+                    };
                 } else {
-                    task.next_open_execution = None;
                     task.next_close_execution = None;
+                }
+
+                if task.next_open_execution.is_none() && task.next_close_execution.is_none() {
                     task.status = TaskStatus::Completed;
+                } else {
+                    task.status = TaskStatus::Active;
                 }
             }
             ExecutionAction::Close => {
                 task.next_close_execution = None;
+                if task.next_open_execution.is_none() {
+                    task.status = TaskStatus::Completed;
+                }
             }
         }
     } else {
@@ -234,22 +244,10 @@ pub(crate) fn apply_success_schedule(
     Ok(())
 }
 
-fn should_continue_repeating(
-    task: &Task,
-    next: DateTime<Utc>,
-    repeat_config: &RepeatConfig,
-) -> bool {
-    match (&repeat_config.end_after, &repeat_config.end_date) {
-        (Some(count), _) => task.execution_count < *count,
-        (None, Some(end_date)) => next < *end_date,
-        (None, None) => true,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{BrowserType, RepeatInterval};
+    use crate::db::{BrowserType, RepeatConfig, RepeatInterval};
     use chrono::{Duration, TimeZone};
 
     fn base_task(start: DateTime<Utc>) -> Task {
@@ -393,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn success_open_repeating_advances_next_and_close_offset() {
+    fn success_open_repeating_keeps_close_for_fired_session() {
         let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
         let mut task = base_task(start);
         task.repeat_config = Some(RepeatConfig {
@@ -408,9 +406,10 @@ mod tests {
             task.next_open_execution,
             Some(Utc.with_ymd_and_hms(2026, 1, 2, 9, 0, 0).unwrap())
         );
+        // Close belongs to the session that just opened (same day 11:00), not tomorrow.
         assert_eq!(
             task.next_close_execution,
-            Some(Utc.with_ymd_and_hms(2026, 1, 2, 11, 0, 0).unwrap())
+            Some(Utc.with_ymd_and_hms(2026, 1, 1, 11, 0, 0).unwrap())
         );
         assert_eq!(task.status, TaskStatus::Active);
     }
@@ -428,8 +427,50 @@ mod tests {
         task.execution_count = 1;
         apply_success_schedule(&mut task, &ExecutionAction::Open, start).unwrap();
         assert!(task.next_open_execution.is_none());
+        // Last open still needs its close.
+        assert_eq!(
+            task.next_close_execution,
+            Some(Utc.with_ymd_and_hms(2026, 1, 1, 11, 0, 0).unwrap())
+        );
+        assert_eq!(task.status, TaskStatus::Active);
+    }
+
+    #[test]
+    fn success_open_last_repeat_completes_after_close() {
+        let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
+        let mut task = base_task(start);
+        task.repeat_config = Some(RepeatConfig {
+            interval: RepeatInterval::Daily,
+            end_after: Some(1),
+            end_date: None,
+        });
+        task.execution_count = 1;
+        task.next_open_execution = None;
+        task.next_close_execution = Some(start + Duration::hours(2));
+        apply_success_schedule(&mut task, &ExecutionAction::Close, start + Duration::hours(2))
+            .unwrap();
         assert!(task.next_close_execution.is_none());
         assert_eq!(task.status, TaskStatus::Completed);
+    }
+
+    #[test]
+    fn success_open_repeating_completes_when_end_date_reached_even_with_end_after() {
+        let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
+        let mut task = base_task(start);
+        task.repeat_config = Some(RepeatConfig {
+            interval: RepeatInterval::Daily,
+            end_after: Some(10),
+            end_date: Some(Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap()),
+        });
+        task.execution_count = 1;
+        apply_success_schedule(&mut task, &ExecutionAction::Open, start).unwrap();
+        // Next open would be Jan 2 09:00, past end_date; keep today's close.
+        assert!(task.next_open_execution.is_none());
+        assert_eq!(
+            task.next_close_execution,
+            Some(Utc.with_ymd_and_hms(2026, 1, 1, 11, 0, 0).unwrap())
+        );
+        assert_eq!(task.status, TaskStatus::Active);
     }
 
     #[test]

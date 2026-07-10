@@ -94,11 +94,21 @@ export function getSystemTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
+/** True when the phrase uses a fixed numeric offset like GMT+5 or UTC-3. */
+export function hasNumericUtcOffset(text: string): boolean {
+  return /(?:GMT|UTC)\s*[+-]\s*\d/i.test(text);
+}
+
 /** Extract the rightmost known timezone abbreviation from free text. */
 export function extractTimezoneAbbr(text: string): string | null {
+  // Bare GMT/UTC with a numeric offset must not map to IANA UTC (would drop the offset).
+  const skipGmtUtc = hasNumericUtcOffset(text);
   const matches = [...text.matchAll(ABBR_TOKEN_RE)].map((m) => m[1].toUpperCase());
   for (let i = matches.length - 1; i >= 0; i--) {
     const token = matches[i];
+    if (skipGmtUtc && (token === 'GMT' || token === 'UTC' || token === 'Z')) {
+      continue;
+    }
     if (TIMEZONE_ABBR_TO_IANA[token]) {
       return token;
     }

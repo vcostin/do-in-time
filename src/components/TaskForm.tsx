@@ -2,12 +2,14 @@ import { useState, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Task, BrowserType, BROWSER_LABELS, TaskStatus, RepeatInterval } from '../types/task';
 import {
+  referenceDateInZone,
   utcToZonedDatetimeString,
   zonedDatetimeStringToUtc,
 } from '../utils/datetime';
 import {
   extractTimezoneAbbr,
   getSystemTimeZone,
+  hasNumericUtcOffset,
   resolveScheduleTimezone,
   scheduleTimezoneOptions,
 } from '../utils/timezone';
@@ -210,15 +212,35 @@ export function TaskForm({ initialTask, onSubmit, onCancel, onDirtyChange }: Tas
       return;
     }
 
-    const results = chrono.parse(input);
+    // Resolve relative phrases ("tomorrow") against the schedule zone's calendar
+    // (or the abbr zone when present), not the machine-local calendar.
+    const abbrHint = extractTimezoneAbbr(input);
+    const refZone = abbrHint
+      ? resolveScheduleTimezone({ abbr: abbrHint, fallbackIana: formData.timezone }).iana
+      : formData.timezone;
+    const results = chrono.parse(input, referenceDateInZone(refZone));
     if (results.length === 0 || !results[0].start) {
       setNlError('Could not understand that time. Try e.g. "tomorrow at 2pm PT" or "Jan 31 from 9am to 11am ET".');
       return;
     }
 
     const parsed = results[0];
-    const abbr = extractTimezoneAbbr(parsed.text) ?? extractTimezoneAbbr(input);
+    const abbr = extractTimezoneAbbr(parsed.text) ?? abbrHint;
     const hasExplicitZone = parsed.start.isCertain('timezoneOffset');
+
+    // Fixed numeric offsets (GMT+5 / UTC-3): trust chrono's instant; keep schedule zone.
+    if (hasExplicitZone && hasNumericUtcOffset(input)) {
+      const scheduleTz = formData.timezone;
+      const startUtc = parsed.start.date().toISOString();
+      const updates: Partial<FormValues> = {
+        startTime: utcToZonedDatetimeString(startUtc, scheduleTz),
+      };
+      if (parsed.end) {
+        updates.closeTime = utcToZonedDatetimeString(parsed.end.date().toISOString(), scheduleTz);
+      }
+      setFormData((prev) => ({ ...prev, ...updates }));
+      return;
+    }
 
     if (hasExplicitZone && abbr) {
       const resolved = resolveScheduleTimezone({
@@ -230,16 +252,24 @@ export function TaskForm({ initialTask, onSubmit, onCancel, onDirtyChange }: Tas
         return;
       }
 
+      // Use chrono wall components + IANA zone (ignore chrono's fixed offset instant).
       const scheduleTz = resolved.iana;
-      const startUtc = parsed.start.date().toISOString();
-      const updates: Partial<FormValues> = {
-        timezone: scheduleTz,
-        startTime: utcToZonedDatetimeString(startUtc, scheduleTz),
-      };
-      if (parsed.end) {
-        updates.closeTime = utcToZonedDatetimeString(parsed.end.date().toISOString(), scheduleTz);
+      try {
+        const startWall = wallClockFromChrono(parsed.start);
+        const startUtc = zonedDatetimeStringToUtc(startWall, scheduleTz);
+        const updates: Partial<FormValues> = {
+          timezone: scheduleTz,
+          startTime: utcToZonedDatetimeString(startUtc, scheduleTz),
+        };
+        if (parsed.end) {
+          const endWall = wallClockFromChrono(parsed.end);
+          const endUtc = zonedDatetimeStringToUtc(endWall, scheduleTz);
+          updates.closeTime = utcToZonedDatetimeString(endUtc, scheduleTz);
+        }
+        setFormData((prev) => ({ ...prev, ...updates }));
+      } catch (err) {
+        setNlError(err instanceof Error ? err.message : 'Could not convert that time in the schedule timezone.');
       }
-      setFormData((prev) => ({ ...prev, ...updates }));
       return;
     }
 
@@ -252,17 +282,21 @@ export function TaskForm({ initialTask, onSubmit, onCancel, onDirtyChange }: Tas
 
     // No zone in phrase: treat chrono wall-clock components as schedule-zone local time.
     const scheduleTz = formData.timezone;
-    const startWall = wallClockFromChrono(parsed.start);
-    const startUtc = zonedDatetimeStringToUtc(startWall, scheduleTz);
-    const updates: Partial<typeof formData> = {
-      startTime: utcToZonedDatetimeString(startUtc, scheduleTz),
-    };
-    if (parsed.end) {
-      const endWall = wallClockFromChrono(parsed.end);
-      const endUtc = zonedDatetimeStringToUtc(endWall, scheduleTz);
-      updates.closeTime = utcToZonedDatetimeString(endUtc, scheduleTz);
+    try {
+      const startWall = wallClockFromChrono(parsed.start);
+      const startUtc = zonedDatetimeStringToUtc(startWall, scheduleTz);
+      const updates: Partial<typeof formData> = {
+        startTime: utcToZonedDatetimeString(startUtc, scheduleTz),
+      };
+      if (parsed.end) {
+        const endWall = wallClockFromChrono(parsed.end);
+        const endUtc = zonedDatetimeStringToUtc(endWall, scheduleTz);
+        updates.closeTime = utcToZonedDatetimeString(endUtc, scheduleTz);
+      }
+      setFormData((prev) => ({ ...prev, ...updates }));
+    } catch (err) {
+      setNlError(err instanceof Error ? err.message : 'Could not convert that time in the schedule timezone.');
     }
-    setFormData((prev) => ({ ...prev, ...updates }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -272,9 +306,38 @@ export function TaskForm({ initialTask, onSubmit, onCancel, onDirtyChange }: Tas
       return;
     }
     setSubmitting(true);
+    setNlError(null);
 
     try {
-      const tz = formData.timezone;
+      const tz = formData.timezone.trim();
+      let startUtc: string;
+      let closeUtc: string | null = null;
+      let endDateUtc: string | null = null;
+      try {
+        startUtc = zonedDatetimeStringToUtc(formData.startTime, tz);
+        if (formData.closeTime) {
+          closeUtc = zonedDatetimeStringToUtc(formData.closeTime, tz);
+        }
+        if (formData.repeatEnabled && formData.repeatEndDate) {
+          endDateUtc = zonedDatetimeStringToUtc(formData.repeatEndDate, tz);
+        }
+      } catch (err) {
+        setNlError(err instanceof Error ? err.message : 'Invalid time in schedule timezone.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (closeUtc && new Date(closeUtc).getTime() <= new Date(startUtc).getTime()) {
+        setNlError('Close time must be after start time.');
+        setSubmitting(false);
+        return;
+      }
+      if (endDateUtc && new Date(endDateUtc).getTime() <= new Date(startUtc).getTime()) {
+        setNlError('Repeat end date must be after start time.');
+        setSubmitting(false);
+        return;
+      }
+
       const task: Task = {
         id: initialTask?.id,
         name: formData.name,
@@ -283,16 +346,14 @@ export function TaskForm({ initialTask, onSubmit, onCancel, onDirtyChange }: Tas
         allow_close_all: formData.allowCloseAll,
         // Profile picker is deferred (BACKLOG); preserve any existing value on edit.
         browser_profile: initialTask?.browser_profile ?? null,
-        start_time: zonedDatetimeStringToUtc(formData.startTime, tz),
-        close_time: formData.closeTime ? zonedDatetimeStringToUtc(formData.closeTime, tz) : null,
+        start_time: startUtc,
+        close_time: closeUtc,
         timezone: tz,
         repeat_config: formData.repeatEnabled
           ? {
               interval: formData.repeatInterval,
               end_after: formData.repeatEndAfter ? parseInt(formData.repeatEndAfter) : null,
-              end_date: formData.repeatEndDate
-                ? zonedDatetimeStringToUtc(formData.repeatEndDate, tz)
-                : null,
+              end_date: endDateUtc,
             }
           : null,
         execution_count: initialTask?.execution_count || 0,

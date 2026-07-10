@@ -1,9 +1,49 @@
-use crate::db::{RepeatInterval, Task};
+use crate::db::{RepeatConfig, RepeatInterval, Task};
 use crate::error::{AppError, Result};
-use chrono::{DateTime, Datelike, Duration, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, LocalResult, NaiveDate, TimeZone, Timelike, Utc};
 use chrono_tz::Tz;
 
+/// Reinterpret the same wall-clock time on `next_date` in `tz` as a zoned instant.
+///
+/// Calendar-day math (not fixed 24h) so daily/weekly repeats keep local wall time across DST.
+/// Ambiguous times (DST fall-back) use the earlier offset; nonexistent times (spring gap) error.
+fn at_wall_clock_on(
+    tz: &Tz,
+    next_date: NaiveDate,
+    hour: u32,
+    minute: u32,
+    second: u32,
+) -> Result<DateTime<Tz>> {
+    let next_datetime = next_date.and_hms_opt(hour, minute, second).ok_or_else(|| {
+        AppError::TimeParse("Failed to create next datetime".to_string())
+    })?;
+
+    match tz.from_local_datetime(&next_datetime) {
+        LocalResult::Single(dt) => Ok(dt),
+        LocalResult::Ambiguous(earliest, _) => Ok(earliest),
+        LocalResult::None => {
+            // Spring-forward gap: snap forward minute-by-minute to the next valid local time
+            // (matches frontend `wallToUtc` snapGap behavior).
+            let mut candidate = next_datetime;
+            for _ in 0..180 {
+                candidate += Duration::minutes(1);
+                match tz.from_local_datetime(&candidate) {
+                    LocalResult::Single(dt) => return Ok(dt),
+                    LocalResult::Ambiguous(earliest, _) => return Ok(earliest),
+                    LocalResult::None => continue,
+                }
+            }
+            Err(AppError::TimeParse(
+                "Nonexistent local time (DST gap)".to_string(),
+            ))
+        }
+    }
+}
+
 /// Advance `base_time` by one repeat interval in the task's timezone.
+///
+/// Preserves the local wall clock (hour/minute/second) across DST, matching the
+/// frontend `addOneInterval` in `scheduleEvents.ts`.
 pub fn add_one_interval(task: &Task, base_time: DateTime<Utc>) -> Result<DateTime<Utc>> {
     let repeat_config = task
         .repeat_config
@@ -15,10 +55,13 @@ pub fn add_one_interval(task: &Task, base_time: DateTime<Utc>) -> Result<DateTim
     })?;
 
     let local_time = base_time.with_timezone(&tz);
+    let hour = local_time.hour();
+    let minute = local_time.minute();
+    let second = local_time.second();
 
-    let next_local = match repeat_config.interval {
-        RepeatInterval::Daily => local_time + Duration::days(1),
-        RepeatInterval::Weekly => local_time + Duration::weeks(1),
+    let next_date = match repeat_config.interval {
+        RepeatInterval::Daily => local_time.date_naive() + Duration::days(1),
+        RepeatInterval::Weekly => local_time.date_naive() + Duration::days(7),
         RepeatInterval::Monthly => {
             let month = local_time.month();
             let year = local_time.year();
@@ -29,34 +72,50 @@ pub fn add_one_interval(task: &Task, base_time: DateTime<Utc>) -> Result<DateTim
                 (month + 1, year)
             };
 
-            let last_day_of_month = chrono::NaiveDate::from_ymd_opt(next_year, next_month + 1, 1)
-                .unwrap_or_else(|| {
-                    chrono::NaiveDate::from_ymd_opt(next_year + 1, 1, 1).unwrap()
-                })
+            let last_day_of_month = NaiveDate::from_ymd_opt(next_year, next_month + 1, 1)
+                .unwrap_or_else(|| NaiveDate::from_ymd_opt(next_year + 1, 1, 1).unwrap())
                 .pred_opt()
                 .unwrap()
                 .day();
 
             let day = local_time.day().min(last_day_of_month);
 
-            let next_date = chrono::NaiveDate::from_ymd_opt(next_year, next_month, day)
-                .ok_or_else(|| {
-                    AppError::TimeParse("Failed to calculate next month".to_string())
-                })?;
-
-            let next_datetime = next_date
-                .and_hms_opt(local_time.hour(), local_time.minute(), local_time.second())
-                .ok_or_else(|| {
-                    AppError::TimeParse("Failed to create next datetime".to_string())
-                })?;
-
-            tz.from_local_datetime(&next_datetime)
-                .single()
-                .ok_or_else(|| AppError::TimeParse("Ambiguous local time".to_string()))?
+            NaiveDate::from_ymd_opt(next_year, next_month, day).ok_or_else(|| {
+                AppError::TimeParse("Failed to calculate next month".to_string())
+            })?
         }
     };
 
+    let next_local = at_wall_clock_on(&tz, next_date, hour, minute, second)?;
     Ok(next_local.with_timezone(&Utc))
+}
+
+/// Whether `next` is still allowed under the task's `end_after` / `end_date` limits.
+///
+/// Matches calendar expansion: stop when either end condition is hit.
+pub fn should_schedule_occurrence(task: &Task, next: DateTime<Utc>) -> bool {
+    let Some(repeat_config) = task.repeat_config.as_ref() else {
+        return true;
+    };
+    occurrence_within_limits(task, next, repeat_config)
+}
+
+fn occurrence_within_limits(
+    task: &Task,
+    next: DateTime<Utc>,
+    repeat_config: &RepeatConfig,
+) -> bool {
+    if let Some(count) = repeat_config.end_after {
+        if task.execution_count >= count {
+            return false;
+        }
+    }
+    if let Some(end_date) = &repeat_config.end_date {
+        if next >= *end_date {
+            return false;
+        }
+    }
+    true
 }
 
 /// Next occurrence strictly after `now`, stepping from `from` by one interval at a time.
@@ -89,6 +148,7 @@ pub fn schedule_inputs_changed(old: &Task, new: &Task) -> bool {
     old.start_time != new.start_time
         || old.close_time != new.close_time
         || old.repeat_config != new.repeat_config
+        || old.timezone != new.timezone
 }
 
 /// Schedule the next open (and matching close) for a repeating task whose
@@ -96,8 +156,40 @@ pub fn schedule_inputs_changed(old: &Task, new: &Task) -> bool {
 ///
 /// For one-shot tasks with no remaining future open/close, sets status to
 /// `Completed` when the task was `Active` (avoids zombie Active cards).
+/// Repeating tasks also clear `next_*` and complete when `end_after` / `end_date`
+/// would exclude the candidate open (aligned with calendar expansion).
+///
+/// When `preserve_session_close` is true (resume), keeps a still-future close that
+/// belongs to an already-fired open (`next_close < next_open`) so pause/resume
+/// does not skip today's close.
 pub fn schedule_next_open_close(task: &mut Task, now: DateTime<Utc>) -> Result<()> {
+    schedule_next_open_close_opts(task, now, false)
+}
+
+/// Like [`schedule_next_open_close`], but preserves an in-progress session close.
+pub fn schedule_next_open_close_preserving_session(
+    task: &mut Task,
+    now: DateTime<Utc>,
+) -> Result<()> {
+    schedule_next_open_close_opts(task, now, true)
+}
+
+fn schedule_next_open_close_opts(
+    task: &mut Task,
+    now: DateTime<Utc>,
+    preserve_session_close: bool,
+) -> Result<()> {
     use crate::db::TaskStatus;
+
+    let pending_session_close = if preserve_session_close {
+        match (task.next_close_execution, task.next_open_execution) {
+            (Some(close), Some(open)) if close > now && close < open => Some(close),
+            (Some(close), None) if close > now => Some(close),
+            _ => None,
+        }
+    } else {
+        None
+    };
 
     if task.repeat_config.is_none() {
         if task.start_time > now {
@@ -132,9 +224,24 @@ pub fn schedule_next_open_close(task: &mut Task, now: DateTime<Utc>) -> Result<(
         next_future_occurrence(task, task.start_time, now)?
     };
 
+    if !should_schedule_occurrence(task, next_open) {
+        task.next_open_execution = None;
+        task.next_close_execution = pending_session_close;
+        if task.next_close_execution.is_none() {
+            if task.status == TaskStatus::Active {
+                task.status = TaskStatus::Completed;
+            }
+        } else {
+            task.status = TaskStatus::Active;
+        }
+        return Ok(());
+    }
+
     task.next_open_execution = Some(next_open);
 
-    if let Some(close_time) = task.close_time {
+    if let Some(close) = pending_session_close {
+        task.next_close_execution = Some(close);
+    } else if let Some(close_time) = task.close_time {
         let time_diff = close_time.signed_duration_since(task.start_time);
         task.next_close_execution = Some(next_open + time_diff);
     } else {
@@ -281,6 +388,80 @@ mod tests {
     }
 
     #[test]
+    fn schedule_inputs_changed_detects_timezone() {
+        let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
+        let old = daily_task(start);
+        let mut new = daily_task(start);
+        new.timezone = "America/New_York".into();
+        assert!(schedule_inputs_changed(&old, &new));
+    }
+
+    #[test]
+    fn daily_preserves_new_york_wall_clock_across_spring_forward() {
+        // Mirrors JS: 2026-03-07 09:00 EST → 2026-03-08 09:00 EDT
+        let start = Utc.with_ymd_and_hms(2026, 3, 7, 14, 0, 0).unwrap();
+        let mut task = daily_task(start);
+        task.timezone = "America/New_York".into();
+        let next = add_one_interval(&task, start).unwrap();
+        assert_eq!(next, Utc.with_ymd_and_hms(2026, 3, 8, 13, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn daily_preserves_new_york_wall_clock_across_fall_back() {
+        // 2026-10-31 09:00 EDT → 2026-11-01 09:00 EST
+        let start = Utc.with_ymd_and_hms(2026, 10, 31, 13, 0, 0).unwrap();
+        let mut task = daily_task(start);
+        task.timezone = "America/New_York".into();
+        let next = add_one_interval(&task, start).unwrap();
+        assert_eq!(next, Utc.with_ymd_and_hms(2026, 11, 1, 14, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn weekly_preserves_new_york_wall_clock_across_dst() {
+        // 2026-03-01 09:00 EST → 2026-03-08 09:00 EDT
+        let start = Utc.with_ymd_and_hms(2026, 3, 1, 14, 0, 0).unwrap();
+        let mut task = daily_task(start);
+        task.timezone = "America/New_York".into();
+        task.repeat_config = Some(RepeatConfig {
+            interval: RepeatInterval::Weekly,
+            end_after: None,
+            end_date: None,
+        });
+        let next = add_one_interval(&task, start).unwrap();
+        assert_eq!(next, Utc.with_ymd_and_hms(2026, 3, 8, 13, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn daily_snaps_forward_across_new_york_spring_gap() {
+        // 2026-03-07 02:30 EST exists; next day 02:30 is in the spring-forward gap → 03:00 EDT.
+        let start = Utc.with_ymd_and_hms(2026, 3, 7, 7, 30, 0).unwrap(); // 02:30 EST
+        let mut task = daily_task(start);
+        task.timezone = "America/New_York".into();
+        let next = add_one_interval(&task, start).unwrap();
+        assert_eq!(next, Utc.with_ymd_and_hms(2026, 3, 8, 7, 0, 0).unwrap()); // 03:00 EDT
+    }
+
+    #[test]
+    fn preserving_session_keeps_pending_close_before_next_open() {
+        let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
+        let mut task = daily_task(start);
+        // Mid-session: open fired, close at 11:00 still pending, next open tomorrow.
+        task.next_open_execution = Some(Utc.with_ymd_and_hms(2026, 1, 2, 9, 0, 0).unwrap());
+        task.next_close_execution = Some(Utc.with_ymd_and_hms(2026, 1, 1, 11, 0, 0).unwrap());
+        let now = Utc.with_ymd_and_hms(2026, 1, 1, 10, 0, 0).unwrap();
+
+        schedule_next_open_close_preserving_session(&mut task, now).unwrap();
+        assert_eq!(
+            task.next_open_execution,
+            Some(Utc.with_ymd_and_hms(2026, 1, 2, 9, 0, 0).unwrap())
+        );
+        assert_eq!(
+            task.next_close_execution,
+            Some(Utc.with_ymd_and_hms(2026, 1, 1, 11, 0, 0).unwrap())
+        );
+    }
+
+    #[test]
     fn schedule_inputs_changed_detects_repeat_added_or_removed() {
         let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
         let with_repeat = daily_task(start);
@@ -402,5 +583,55 @@ mod tests {
             Some(Utc.with_ymd_and_hms(2026, 1, 4, 11, 0, 0).unwrap())
         );
         assert_eq!(task.status, TaskStatus::Active);
+    }
+
+    #[test]
+    fn repeating_past_end_date_completes_without_next() {
+        let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
+        let mut task = daily_task(start);
+        task.repeat_config = Some(RepeatConfig {
+            interval: RepeatInterval::Daily,
+            end_after: None,
+            end_date: Some(Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap()),
+        });
+        // Now is Jan 3 — next open would be Jan 4, past end_date.
+        let now = Utc.with_ymd_and_hms(2026, 1, 3, 12, 0, 0).unwrap();
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert!(task.next_open_execution.is_none());
+        assert!(task.next_close_execution.is_none());
+        assert_eq!(task.status, TaskStatus::Completed);
+    }
+
+    #[test]
+    fn repeating_future_start_past_end_date_completes() {
+        let start = Utc.with_ymd_and_hms(2026, 6, 1, 9, 0, 0).unwrap();
+        let mut task = daily_task(start);
+        task.repeat_config = Some(RepeatConfig {
+            interval: RepeatInterval::Daily,
+            end_after: None,
+            end_date: Some(Utc.with_ymd_and_hms(2026, 5, 1, 0, 0, 0).unwrap()),
+        });
+        let now = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert!(task.next_open_execution.is_none());
+        assert!(task.next_close_execution.is_none());
+        assert_eq!(task.status, TaskStatus::Completed);
+    }
+
+    #[test]
+    fn repeating_end_after_already_reached_completes() {
+        let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
+        let mut task = daily_task(start);
+        task.repeat_config = Some(RepeatConfig {
+            interval: RepeatInterval::Daily,
+            end_after: Some(2),
+            end_date: None,
+        });
+        task.execution_count = 2;
+        let now = Utc.with_ymd_and_hms(2026, 1, 3, 12, 0, 0).unwrap();
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert!(task.next_open_execution.is_none());
+        assert!(task.next_close_execution.is_none());
+        assert_eq!(task.status, TaskStatus::Completed);
     }
 }

@@ -4,13 +4,16 @@ import {
   normalizeDate,
   normalizeTime,
   pickerDateTimeFormats,
+  referenceDateInZone,
   splitDatetimeLocal,
   utcToZonedDatetimeString,
+  wallToUtc,
   zonedDatetimeStringToUtc,
 } from './datetime.ts';
 import {
   abbrToIana,
   extractTimezoneAbbr,
+  hasNumericUtcOffset,
   resolveScheduleTimezone,
 } from './timezone.ts';
 
@@ -36,6 +39,13 @@ Deno.test('extractTimezoneAbbr finds rightmost known token', () => {
   assertEquals(extractTimezoneAbbr('tomorrow at 2pm PT'), 'PT');
   assertEquals(extractTimezoneAbbr('March 15 9:00 JST'), 'JST');
   assertEquals(extractTimezoneAbbr('tomorrow at 2pm'), null);
+});
+
+Deno.test('extractTimezoneAbbr ignores GMT/UTC when numeric offset present', () => {
+  assertEquals(extractTimezoneAbbr('March 15 at 2pm GMT+5'), null);
+  assertEquals(extractTimezoneAbbr('tomorrow 9am UTC-3'), null);
+  assertEquals(hasNumericUtcOffset('2pm GMT+5'), true);
+  assertEquals(hasNumericUtcOffset('2pm ET'), false);
 });
 
 Deno.test('resolveScheduleTimezone uses abbr or fallback', () => {
@@ -70,6 +80,33 @@ Deno.test('JST wall clock converts to UTC', () => {
   const wall = '2026-03-15T09:00';
   const utc = zonedDatetimeStringToUtc(wall, 'Asia/Tokyo');
   assertEquals(utc, '2026-03-15T00:00:00.000Z');
+});
+
+Deno.test('referenceDateInZone mirrors wall clock in target zone', () => {
+  // 2026-07-10 22:30 UTC = 2026-07-11 07:30 JST
+  const instant = new Date('2026-07-10T22:30:00.000Z');
+  const ref = referenceDateInZone('Asia/Tokyo', instant);
+  assertEquals(ref.getFullYear(), 2026);
+  assertEquals(ref.getMonth(), 6); // July
+  assertEquals(ref.getDate(), 11);
+  assertEquals(ref.getHours(), 7);
+  assertEquals(ref.getMinutes(), 30);
+});
+
+Deno.test('zonedDatetimeStringToUtc rejects America/New_York spring gap', () => {
+  let threw = false;
+  try {
+    zonedDatetimeStringToUtc('2026-03-08T02:30', 'America/New_York');
+  } catch {
+    threw = true;
+  }
+  assertEquals(threw, true);
+});
+
+Deno.test('wallToUtc snapGap advances past America/New_York spring gap', () => {
+  const utc = wallToUtc('2026-03-08T02:30:00', 'America/New_York', { snapGap: true });
+  // First valid local after gap is 03:00 EDT = 07:00Z
+  assertEquals(utc.toISOString(), '2026-03-08T07:00:00.000Z');
 });
 
 Deno.test('splitDatetimeLocal and composeDatetimeLocal round-trip', () => {
