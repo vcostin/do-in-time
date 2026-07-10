@@ -18,6 +18,12 @@ const host = getEnv("TAURI_DEV_HOST");
 export default defineConfig(async () => ({
   plugins: [react()],
 
+  // Keep CSS in one file. Splitting it with lazy JS chunks injected stylesheets
+  // asynchronously and triggered WebKitGTK (Tauri) paint glitches on header icons.
+  build: {
+    cssCodeSplit: false,
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
