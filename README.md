@@ -12,9 +12,10 @@ A cross-platform desktop application for scheduling browsers to open and close a
 - **Profiles (basic)**: Optional free-text profile name/directory for launch; full profile management is [planned](BACKLOG.md)
 
 ### ⏰ Flexible Scheduling
-- **Natural Language Input**: Enter schedules like "January 31st from 9am to 11am ET"
-- **Precise Timing**: Set exact start and close times for browser sessions
-- **Timezone Support**: Full timezone handling with UTC storage and local display
+- **Natural Language Input**: Enter schedules like "January 31st from 9am to 11am ET" or "tomorrow at 2pm JST"
+- **Schedule timezone**: Pick an IANA zone (or let NL abbreviations like ET/PT/CET set it); wall times are entered in that zone
+- **UTC storage**: Instants are stored as UTC; repeats keep the same local wall clock across DST in the schedule zone
+- **Local display**: Task cards show your local time plus the schedule-zone time when they differ
 - **Repeating Tasks**: Daily, weekly, or monthly recurring schedules
 - **Close behavior**: Reliable tab close on macOS; Windows/Linux are best-effort (window title / optional close-all). True cross-platform tab close is [on hold](BACKLOG.md)
 
@@ -125,13 +126,17 @@ deno task dev
 
 3. **Set schedule using one of two methods:**
 
+   Choose a **Schedule timezone** (defaults to your system zone). Start/close times are wall clocks in that zone and are saved as UTC.
+
    **Option A - Natural Language (Quick):**
-   - Enter: "tomorrow from 9am to 5pm"
-   - Enter: "next Friday at 2pm"
+   - Enter: "tomorrow from 9am to 5pm" (uses the selected schedule timezone)
+   - Enter: "next Friday at 2pm PT"
    - Enter: "January 31st from 9am to 11am ET"
+   - Enter: "March 15 2026 9:00 JST"
+   - Zone abbreviations (ET, PT, CET, JST, …) update the schedule timezone; failed parses show an error
 
    **Option B - Manual (Precise):**
-   - Select **Start Time** from datetime picker
+   - Select **Start Time** from datetime picker (in the schedule timezone)
    - Select **Close Time** (optional)
 
 4. **Configure repeating (optional):**
@@ -265,6 +270,9 @@ do-in-time/
 # Rust backend tests
 cd src-tauri
 cargo test
+
+# Frontend timezone / datetime util tests
+deno task test:utils
 ```
 
 ### Code Style

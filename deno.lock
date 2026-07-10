@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "npm:@tauri-apps/api@2": "2.10.1",
+    "npm:@tauri-apps/cli@*": "2.10.0",
     "npm:@tauri-apps/cli@2": "2.10.0",
     "npm:@tauri-apps/plugin-opener@2": "2.5.3",
     "npm:@types/node@^22.15.0": "22.20.1",
@@ -10,7 +11,9 @@
     "npm:@types/react@^19.1.8": "19.2.14",
     "npm:@vitejs/plugin-react@^4.6.0": "4.7.0_vite@7.3.2__@types+node@22.20.1_@types+node@22.20.1",
     "npm:autoprefixer@^10.4.20": "10.4.24_postcss@8.5.6",
+    "npm:chrono-node@2.9.0": "2.9.0",
     "npm:chrono-node@^2.9.0": "2.9.0",
+    "npm:date-fns-tz@3.2.0": "3.2.0_date-fns@3.6.0",
     "npm:date-fns@^3.6.0": "3.6.0",
     "npm:postcss@^8.4.49": "8.5.6",
     "npm:react-datepicker@^7.5.0": "7.6.0_react@19.2.4_react-dom@19.2.4__react@19.2.4",
@@ -748,6 +751,12 @@
     "csstype@3.2.3": {
       "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="
     },
+    "date-fns-tz@3.2.0_date-fns@3.6.0": {
+      "integrity": "sha512-sg8HqoTEulcbbbVXeg84u5UnlsQa8GS5QXMqjjYIhS4abEVVKIUwe0/l/UhrZdKaL/W5eWZNlbTeEIiOXTcsBQ==",
+      "dependencies": [
+        "date-fns"
+      ]
+    },
     "date-fns@3.6.0": {
       "integrity": "sha512-fRHTG8g/Gif+kSh50gaGEdToemgfj74aRX3swtiouboip5JDLAyDE9F11nHMIcvOaXeOC6D7SpNhi7uFyB7Uww=="
     },
@@ -1255,6 +1264,7 @@
         "npm:@vitejs/plugin-react@^4.6.0",
         "npm:autoprefixer@^10.4.20",
         "npm:chrono-node@^2.9.0",
+        "npm:date-fns-tz@3.2.0",
         "npm:date-fns@^3.6.0",
         "npm:postcss@^8.4.49",
         "npm:react-datepicker@^7.5.0",

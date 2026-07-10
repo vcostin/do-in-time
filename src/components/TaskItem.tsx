@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Task, TaskStatus, BROWSER_LABELS, TaskExecutionLogEntry } from '../types/task';
 import { format } from 'date-fns';
+import { formatUtcInZone } from '../utils/datetime';
+import { getSystemTimeZone } from '../utils/timezone';
 
 interface TaskItemProps {
   task: Task;
@@ -31,6 +33,10 @@ export function TaskItem({
     [TaskStatus.Disabled]: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
   };
 
+  const localZone = getSystemTimeZone();
+  const scheduleZone = task.timezone || localZone;
+  const showScheduleZone = scheduleZone !== localZone;
+
   const formatDate = (dateStr: string) => {
     try {
       return format(new Date(dateStr), 'PPp');
@@ -38,6 +44,28 @@ export function TaskItem({
       return dateStr;
     }
   };
+
+  const formatScheduleDate = (dateStr: string) => {
+    try {
+      return `${formatUtcInZone(dateStr, scheduleZone)} ${scheduleZone}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const TimeLine = ({ label, value }: { label: string; value: string }) => (
+    <div className="flex items-start gap-2">
+      <span className="font-medium shrink-0">{label}</span>
+      <span className="min-w-0">
+        <span className="block">{formatDate(value)}</span>
+        {showScheduleZone && (
+          <span className="block text-xs text-gray-500 dark:text-gray-500">
+            {formatScheduleDate(value)}
+          </span>
+        )}
+      </span>
+    </div>
+  );
 
   useEffect(() => {
     if (!showLog || !task.id) {
@@ -103,31 +131,22 @@ export function TaskItem({
               </div>
             )}
 
-            <div className="flex items-center gap-2">
-              <span className="font-medium">Start Time:</span>
-              <span>{formatDate(task.start_time)}</span>
-            </div>
+            <TimeLine label="Start Time:" value={task.start_time} />
 
-            {task.close_time && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Close Time:</span>
-                <span>{formatDate(task.close_time)}</span>
-              </div>
-            )}
+            {task.close_time && <TimeLine label="Close Time:" value={task.close_time} />}
 
             {task.next_open_execution && task.status === TaskStatus.Active && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Next Open:</span>
-                <span>{formatDate(task.next_open_execution)}</span>
-              </div>
+              <TimeLine label="Next Open:" value={task.next_open_execution} />
             )}
 
             {task.next_close_execution && task.status === TaskStatus.Active && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Next Close:</span>
-                <span>{formatDate(task.next_close_execution)}</span>
-              </div>
+              <TimeLine label="Next Close:" value={task.next_close_execution} />
             )}
+
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Schedule TZ:</span>
+              <span>{scheduleZone}</span>
+            </div>
 
             {task.repeat_config && (
               <div className="flex items-center gap-2">

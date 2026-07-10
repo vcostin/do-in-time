@@ -1,8 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Task, BrowserType, BROWSER_LABELS, TaskStatus, RepeatInterval } from '../types/task';
-import { utcToLocalDatetimeString, localDatetimeStringToUtc } from '../utils/datetime';
+import {
+  utcToZonedDatetimeString,
+  zonedDatetimeStringToUtc,
+} from '../utils/datetime';
+import {
+  extractTimezoneAbbr,
+  getSystemTimeZone,
+  resolveScheduleTimezone,
+  scheduleTimezoneOptions,
+} from '../utils/timezone';
 import * as chrono from 'chrono-node';
+import type { ParsedComponents } from 'chrono-node';
 
 interface TaskFormProps {
   initialTask: Task | null;
@@ -54,6 +64,15 @@ function orderBrowsers(
   return ordered;
 }
 
+function wallClockFromChrono(component: ParsedComponents): string {
+  const year = component.get('year');
+  const month = String(component.get('month')).padStart(2, '0');
+  const day = String(component.get('day')).padStart(2, '0');
+  const hour = String(component.get('hour') ?? 0).padStart(2, '0');
+  const minute = String(component.get('minute') ?? 0).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
 export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [detectingBrowsers, setDetectingBrowsers] = useState(true);
@@ -61,6 +80,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
   const [installedBrowsers, setInstalledBrowsers] = useState<BrowserType[]>([]);
   const [defaultBrowser, setDefaultBrowser] = useState<BrowserType | null>(null);
   const [naturalLanguageTime, setNaturalLanguageTime] = useState('');
+  const [nlError, setNlError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     browser: '' as BrowserType | '',
@@ -69,12 +89,17 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
     browserProfile: '',
     startTime: '',
     closeTime: '',
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timezone: getSystemTimeZone(),
     repeatEnabled: false,
     repeatInterval: RepeatInterval.Daily,
     repeatEndAfter: '',
     repeatEndDate: '',
   });
+
+  const timezoneOptions = useMemo(
+    () => scheduleTimezoneOptions(formData.timezone),
+    [formData.timezone],
+  );
 
   // Detect installed browsers on mount
   useEffect(() => {
@@ -117,48 +142,91 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
 
   useEffect(() => {
     if (initialTask) {
+      const tz = initialTask.timezone || getSystemTimeZone();
       setFormData({
         name: initialTask.name,
         browser: initialTask.browser,
         url: initialTask.url || '',
         allowCloseAll: initialTask.allow_close_all || false,
         browserProfile: initialTask.browser_profile || '',
-        startTime: initialTask.start_time ? utcToLocalDatetimeString(initialTask.start_time) : '',
-        closeTime: initialTask.close_time ? utcToLocalDatetimeString(initialTask.close_time) : '',
-        timezone: initialTask.timezone,
+        startTime: initialTask.start_time
+          ? utcToZonedDatetimeString(initialTask.start_time, tz)
+          : '',
+        closeTime: initialTask.close_time
+          ? utcToZonedDatetimeString(initialTask.close_time, tz)
+          : '',
+        timezone: tz,
         repeatEnabled: !!initialTask.repeat_config,
         repeatInterval: initialTask.repeat_config?.interval || RepeatInterval.Daily,
         repeatEndAfter: initialTask.repeat_config?.end_after?.toString() || '',
-        repeatEndDate: initialTask.repeat_config?.end_date ? utcToLocalDatetimeString(initialTask.repeat_config.end_date) : '',
+        repeatEndDate: initialTask.repeat_config?.end_date
+          ? utcToZonedDatetimeString(initialTask.repeat_config.end_date, tz)
+          : '',
       });
     }
   }, [initialTask]);
 
   const handleNaturalLanguageInput = (input: string) => {
     setNaturalLanguageTime(input);
+    setNlError(null);
 
-    if (!input.trim()) return;
-
-    // Parse the natural language date/time string
-    const results = chrono.parse(input);
-
-    if (results.length > 0) {
-      const parsed = results[0];
-
-      // Get start time
-      if (parsed.start) {
-        const startDate = parsed.start.date();
-        const startTimeStr = utcToLocalDatetimeString(startDate.toISOString());
-        setFormData(prev => ({ ...prev, startTime: startTimeStr }));
-      }
-
-      // Get end time if available (for "from X to Y" patterns)
-      if (parsed.end) {
-        const endDate = parsed.end.date();
-        const endTimeStr = utcToLocalDatetimeString(endDate.toISOString());
-        setFormData(prev => ({ ...prev, closeTime: endTimeStr }));
-      }
+    if (!input.trim()) {
+      return;
     }
+
+    const results = chrono.parse(input);
+    if (results.length === 0 || !results[0].start) {
+      setNlError('Could not understand that time. Try e.g. "tomorrow at 2pm PT" or "Jan 31 from 9am to 11am ET".');
+      return;
+    }
+
+    const parsed = results[0];
+    const abbr = extractTimezoneAbbr(parsed.text) ?? extractTimezoneAbbr(input);
+    const hasExplicitZone = parsed.start.isCertain('timezoneOffset');
+
+    if (hasExplicitZone && abbr) {
+      const resolved = resolveScheduleTimezone({
+        abbr,
+        fallbackIana: formData.timezone,
+      });
+      if (resolved.error) {
+        setNlError(resolved.error);
+        return;
+      }
+
+      const scheduleTz = resolved.iana;
+      const startUtc = parsed.start.date().toISOString();
+      const updates: Partial<typeof formData> = {
+        timezone: scheduleTz,
+        startTime: utcToZonedDatetimeString(startUtc, scheduleTz),
+      };
+      if (parsed.end) {
+        updates.closeTime = utcToZonedDatetimeString(parsed.end.date().toISOString(), scheduleTz);
+      }
+      setFormData((prev) => ({ ...prev, ...updates }));
+      return;
+    }
+
+    if (hasExplicitZone && !abbr) {
+      setNlError(
+        'Timezone abbreviation was not recognized. Pick a schedule timezone below, or use a known abbr like ET, PT, CET, JST.',
+      );
+      return;
+    }
+
+    // No zone in phrase: treat chrono wall-clock components as schedule-zone local time.
+    const scheduleTz = formData.timezone;
+    const startWall = wallClockFromChrono(parsed.start);
+    const startUtc = zonedDatetimeStringToUtc(startWall, scheduleTz);
+    const updates: Partial<typeof formData> = {
+      startTime: utcToZonedDatetimeString(startUtc, scheduleTz),
+    };
+    if (parsed.end) {
+      const endWall = wallClockFromChrono(parsed.end);
+      const endUtc = zonedDatetimeStringToUtc(endWall, scheduleTz);
+      updates.closeTime = utcToZonedDatetimeString(endUtc, scheduleTz);
+    }
+    setFormData((prev) => ({ ...prev, ...updates }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -170,6 +238,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
     setSubmitting(true);
 
     try {
+      const tz = formData.timezone;
       const task: Task = {
         id: initialTask?.id,
         name: formData.name,
@@ -177,14 +246,16 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         url: formData.url || null,
         allow_close_all: formData.allowCloseAll,
         browser_profile: formData.browserProfile || null,
-        start_time: localDatetimeStringToUtc(formData.startTime),
-        close_time: formData.closeTime ? localDatetimeStringToUtc(formData.closeTime) : null,
-        timezone: formData.timezone,
+        start_time: zonedDatetimeStringToUtc(formData.startTime, tz),
+        close_time: formData.closeTime ? zonedDatetimeStringToUtc(formData.closeTime, tz) : null,
+        timezone: tz,
         repeat_config: formData.repeatEnabled
           ? {
               interval: formData.repeatInterval,
               end_after: formData.repeatEndAfter ? parseInt(formData.repeatEndAfter) : null,
-              end_date: formData.repeatEndDate ? localDatetimeStringToUtc(formData.repeatEndDate) : null,
+              end_date: formData.repeatEndDate
+                ? zonedDatetimeStringToUtc(formData.repeatEndDate, tz)
+                : null,
             }
           : null,
         execution_count: initialTask?.execution_count || 0,
@@ -289,10 +360,31 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         />
       </div>
 
+      <div>
+        <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Schedule timezone
+          <InfoTooltip text="Wall-clock times below are in this timezone. Stored as UTC in the database. Repeating tasks keep the same local time across DST in this zone. Natural-language phrases like ET or JST update this field." />
+        </label>
+        <select
+          value={formData.timezone}
+          onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+        >
+          {timezoneOptions.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz === getSystemTimeZone() ? `${tz} (system)` : tz}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Changing the zone keeps the typed clock times; the UTC instant updates on save.
+        </p>
+      </div>
+
       <div className="border-2 border-blue-200 dark:border-blue-800 rounded-lg p-4 bg-blue-50 dark:bg-blue-900/20">
         <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Quick Time Entry (optional)
-          <InfoTooltip text="Enter times in natural language like 'January 31st from 9am to 11am ET' or 'tomorrow at 2pm to 4pm'. This will automatically fill the Start and Close Time fields below." />
+          <InfoTooltip text="Natural language like 'January 31st from 9am to 11am ET', 'tomorrow at 2pm PT', or 'March 15 9:00 JST'. Zone abbreviations set the schedule timezone; without a zone, times use the schedule timezone selected above." />
         </label>
         <input
           type="text"
@@ -301,15 +393,19 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           placeholder="e.g., January 31st from 9am to 11am ET"
         />
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Try: "next Friday at 3pm", "tomorrow from 9am to 5pm", "Jan 15th at 2:30pm"
-        </p>
+        {nlError ? (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{nlError}</p>
+        ) : (
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Try: "next Friday at 3pm", "tomorrow from 9am to 5pm PT", "Jan 15th at 2:30pm JST"
+          </p>
+        )}
       </div>
 
       <div>
         <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Start Time
-          <InfoTooltip text="The exact date and time when the browser should open. The task will run in your local timezone." />
+          <InfoTooltip text="Wall-clock open time in the schedule timezone above. Saved as UTC; repeats follow that zone's DST rules." />
         </label>
         <input
           type="datetime-local"
@@ -323,7 +419,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
       <div>
         <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Close Time (optional)
-          <InfoTooltip text="Optional: date and time when the browser should automatically close. Leave empty if you don't want to automatically close the browser." />
+          <InfoTooltip text="Optional wall-clock close time in the schedule timezone. Leave empty if you don't want to automatically close the browser." />
         </label>
         <input
           type="datetime-local"
@@ -399,7 +495,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               End date (optional)
-              <InfoTooltip text="Stop repeating after this date and time. The task will not execute beyond this point. Leave empty for unlimited repetitions." />
+              <InfoTooltip text="Stop repeating after this date and time (in the schedule timezone). Leave empty for unlimited repetitions." />
             </label>
             <input
               type="datetime-local"

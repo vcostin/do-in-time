@@ -187,13 +187,116 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-async fn rebuild_tasks_table(pool: &SqlitePool) -> Result<()> {
-    sqlx::query("BEGIN").execute(pool).await?;
+async fn table_exists(pool: &SqlitePool, table: &str) -> Result<bool> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
+    )
+    .bind(table)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0 > 0)
+}
 
-    let result = async {
+async fn rebuild_tasks_table(pool: &SqlitePool) -> Result<()> {
+    // Recover / clean leftovers from older pool-based BEGIN/COMMIT (which could
+    // run statements on different connections and leave `tasks_new` behind).
+    let has_tasks = table_exists(pool, "tasks").await?;
+    let has_tasks_new = table_exists(pool, "tasks_new").await?;
+    if !has_tasks && has_tasks_new {
+        sqlx::query("ALTER TABLE tasks_new RENAME TO tasks")
+            .execute(pool)
+            .await?;
+        ensure_indexes(pool).await?;
+        return Ok(());
+    }
+    if has_tasks_new {
+        sqlx::query("DROP TABLE IF EXISTS tasks_new")
+            .execute(pool)
+            .await?;
+    }
+
+    let mut tx = pool.begin().await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE tasks_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            browser TEXT NOT NULL,
+            browser_profile TEXT,
+            url TEXT,
+            allow_close_all INTEGER NOT NULL DEFAULT 0,
+            start_time TEXT NOT NULL,
+            close_time TEXT,
+            timezone TEXT NOT NULL,
+            repeat_interval TEXT,
+            repeat_end_after INTEGER,
+            repeat_end_date TEXT,
+            execution_count INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'failed', 'disabled')),
+            next_open_execution TEXT,
+            next_close_execution TEXT,
+            last_error TEXT,
+            last_execution_at TEXT
+        )
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO tasks_new (
+            id, name, browser, browser_profile, url, allow_close_all,
+            start_time, close_time, timezone,
+            repeat_interval, repeat_end_after, repeat_end_date,
+            execution_count, status,
+            next_open_execution, next_close_execution,
+            last_error, last_execution_at
+        )
+        SELECT
+            id, name, browser, browser_profile, url, allow_close_all,
+            start_time, close_time, timezone,
+            repeat_interval, repeat_end_after, repeat_end_date,
+            execution_count, status,
+            next_open_execution, next_close_execution,
+            last_error, last_execution_at
+        FROM tasks
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query("DROP TABLE tasks").execute(&mut *tx).await?;
+    sqlx::query("ALTER TABLE tasks_new RENAME TO tasks")
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    ensure_indexes(pool).await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn memory_pool() -> SqlitePool {
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn recovers_from_leftover_tasks_new() {
+        let pool = memory_pool().await;
+
         sqlx::query(
             r#"
-            CREATE TABLE tasks_new (
+            CREATE TABLE tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 browser TEXT NOT NULL,
@@ -207,58 +310,40 @@ async fn rebuild_tasks_table(pool: &SqlitePool) -> Result<()> {
                 repeat_end_after INTEGER,
                 repeat_end_date TEXT,
                 execution_count INTEGER NOT NULL DEFAULT 0,
-                status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'failed', 'disabled')),
+                status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'failed')),
                 next_open_execution TEXT,
-                next_close_execution TEXT,
-                last_error TEXT,
-                last_execution_at TEXT
+                next_close_execution TEXT
             )
             "#,
         )
-        .execute(pool)
-        .await?;
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
-            r#"
-            INSERT INTO tasks_new (
-                id, name, browser, browser_profile, url, allow_close_all,
-                start_time, close_time, timezone,
-                repeat_interval, repeat_end_after, repeat_end_date,
-                execution_count, status,
-                next_open_execution, next_close_execution,
-                last_error, last_execution_at
-            )
-            SELECT
-                id, name, browser, browser_profile, url, allow_close_all,
-                start_time, close_time, timezone,
-                repeat_interval, repeat_end_after, repeat_end_date,
-                execution_count, status,
-                next_open_execution, next_close_execution,
-                last_error, last_execution_at
-            FROM tasks
-            "#,
+            "INSERT INTO tasks (name, browser, start_time, timezone, status)
+             VALUES ('t', 'chrome', '2026-01-01T00:00:00Z', 'UTC', 'active')",
         )
-        .execute(pool)
-        .await?;
+        .execute(&pool)
+        .await
+        .unwrap();
 
-        sqlx::query("DROP TABLE tasks").execute(pool).await?;
-        sqlx::query("ALTER TABLE tasks_new RENAME TO tasks")
-            .execute(pool)
-            .await?;
+        // Simulate interrupted migration leftover.
+        sqlx::query("CREATE TABLE tasks_new (id INTEGER PRIMARY KEY)")
+            .execute(&pool)
+            .await
+            .unwrap();
 
-        ensure_indexes(pool).await?;
-        Ok::<(), crate::error::AppError>(())
-    }
-    .await;
+        initialize_schema(&pool).await.expect("schema init should recover");
 
-    match result {
-        Ok(()) => {
-            sqlx::query("COMMIT").execute(pool).await?;
-            Ok(())
-        }
-        Err(e) => {
-            let _ = sqlx::query("ROLLBACK").execute(pool).await;
-            Err(e)
-        }
+        assert!(table_exists(&pool, "tasks").await.unwrap());
+        assert!(!table_exists(&pool, "tasks_new").await.unwrap());
+        assert_eq!(current_version(&pool).await.unwrap(), 1);
+
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 1);
     }
 }

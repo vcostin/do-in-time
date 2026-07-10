@@ -31,6 +31,15 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 
 ## Done
 
+### Natural-language time / timezone honesty
+
+**Status:** `done`  
+- Schedule timezone picker (IANA); wall times entered in that zone
+- NL abbreviations (ET, PT, JST, …) map to IANA zones — not ET-only hardcoding
+- Instants stored as UTC; repeats use stored IANA zone for DST-safe math
+- Failed NL parses surface an error; README matches behavior
+- Task cards show operator-local time plus schedule-zone time when they differ
+
 ### Failure logging / last error + execution log
 
 **Status:** `done`  
@@ -100,20 +109,6 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 
 **Acceptance:**
 - Editing only the repeat settings updates upcoming executions without requiring a time edit
-
-### Natural-language time / timezone honesty
-
-**Status:** `planned`  
-**Today:** Chrono NL examples in the README imply timezone phrases (e.g. “ET”), but the form always stores the system timezone and silently ignores failed parses.
-
-**Future:**
-- Parse or strip timezone phrases consistently; store what the user meant when possible
-- Show validation feedback when NL input does not resolve
-- Align README examples with actual behavior
-
-**Acceptance:**
-- Failed NL input is visible to the user
-- Docs do not promise timezone handling the form does not implement
 
 ### Execution log retention
 
@@ -187,4 +182,4 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
-- **Next iteration priority (suggested):** harden close scoping → soft close failures + zombie/reschedule fixes → NL time honesty → tests. Profile management / dark mode are polish. Full tab close remains on-hold.
+- **Next iteration priority (suggested):** harden close scoping → soft close failures + zombie/reschedule fixes → tests. Profile management / dark mode are polish. Full tab close remains on-hold.
