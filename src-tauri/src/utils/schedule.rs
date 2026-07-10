@@ -147,6 +147,8 @@ mod tests {
             status: TaskStatus::Active,
             next_open_execution: Some(start),
             next_close_execution: Some(start + Duration::hours(2)),
+            last_error: None,
+            last_execution_at: None,
         }
     }
 

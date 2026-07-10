@@ -27,7 +27,9 @@ A cross-platform desktop application for scheduling browsers to open and close a
 ### 🎯 Smart Task Management
 - **Real-time Updates**: Event-based UI updates for instant status changes
 - **Automatic Scheduling**: Background scheduler runs automatically on startup
-- **Task Status**: Monitor tasks (Active, Completed, Failed)
+- **Task Status**: Monitor tasks (Active, Completed, Failed, Disabled)
+- **Failure logging**: Last error on the task card plus a recent execution log
+- **Pause / Retry**: Pause active tasks; resume disabled or retry failed without deleting
 
 ### 🎨 Modern UI
 - **Responsive Design**: Clean, intuitive interface built with React and Tailwind CSS
@@ -35,7 +37,7 @@ A cross-platform desktop application for scheduling browsers to open and close a
 - **Visual Feedback**: Color-coded status indicators and tooltips
 - **Dark mode**: [Planned](BACKLOG.md) — styles exist; theme switching not wired yet
 
-See [BACKLOG.md](BACKLOG.md) for deferred work (failure logging, profile management, dark mode, major close improvements).
+See [BACKLOG.md](BACKLOG.md) for deferred work (profile management, dark mode, major close improvements).
 
 ## Installation
 
@@ -148,7 +150,9 @@ deno task dev
 
 - **Edit**: Click the "Edit" button on any task
 - **Delete**: Click "Delete" to remove a task
-- **Status**: Tasks show real-time status (Active, Completed, Failed)
+- **Pause / Resume / Retry**: Pause active tasks; resume disabled ones or retry after a failure
+- **Log**: Expand recent open/close attempts and error messages
+- **Status**: Tasks show real-time status (Active, Completed, Failed, Disabled)
 
 ### Scheduler Control
 

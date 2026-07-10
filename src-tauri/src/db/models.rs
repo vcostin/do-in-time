@@ -19,6 +19,20 @@ pub struct Task {
     pub status: TaskStatus,
     pub next_open_execution: Option<DateTime<Utc>>,
     pub next_close_execution: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+    #[serde(default)]
+    pub last_execution_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskExecutionLogEntry {
+    pub id: i64,
+    pub task_id: i64,
+    pub action: String,
+    pub success: bool,
+    pub message: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -74,6 +88,7 @@ pub enum TaskStatus {
     Active,
     Completed,
     Failed,
+    Disabled,
 }
 
 impl std::fmt::Display for TaskStatus {
@@ -82,6 +97,7 @@ impl std::fmt::Display for TaskStatus {
             TaskStatus::Active => "active",
             TaskStatus::Completed => "completed",
             TaskStatus::Failed => "failed",
+            TaskStatus::Disabled => "disabled",
         };
         write!(f, "{}", s)
     }
@@ -95,6 +111,7 @@ impl std::str::FromStr for TaskStatus {
             "active" => Ok(TaskStatus::Active),
             "completed" => Ok(TaskStatus::Completed),
             "failed" => Ok(TaskStatus::Failed),
+            "disabled" => Ok(TaskStatus::Disabled),
             _ => Err(format!("Unknown task status: {}", s)),
         }
     }
@@ -168,7 +185,24 @@ impl std::str::FromStr for ExecutionAction {
     }
 }
 
+const MAX_ERROR_LEN: usize = 500;
+
 impl Task {
+    pub fn set_last_error(&mut self, message: impl AsRef<str>) {
+        let mut msg = message.as_ref().trim().to_string();
+        if msg.len() > MAX_ERROR_LEN {
+            msg.truncate(MAX_ERROR_LEN);
+            msg.push('…');
+        }
+        self.last_error = Some(msg);
+        self.last_execution_at = Some(Utc::now());
+    }
+
+    pub fn clear_last_error(&mut self) {
+        self.last_error = None;
+        self.last_execution_at = Some(Utc::now());
+    }
+
     #[allow(dead_code)]
     pub fn new(
         name: String,
@@ -191,6 +225,8 @@ impl Task {
             status: TaskStatus::Active,
             next_open_execution: Some(start_time),
             next_close_execution: None,
+            last_error: None,
+            last_execution_at: None,
         }
     }
 }

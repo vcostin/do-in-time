@@ -9,7 +9,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { Task } from './types/task';
 
 function App() {
-  const { tasks, loading, error, createTask, updateTask, deleteTask } = useTasks();
+  const { tasks, loading, error, createTask, updateTask, deleteTask, setTaskPaused, getTaskExecutionLog } = useTasks();
   const { running, toggleScheduler } = useScheduler();
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -41,6 +41,22 @@ function App() {
       } catch (err) {
         alert(err instanceof Error ? err.message : 'Failed to delete task');
       }
+    }
+  };
+
+  const handlePause = async (id: number) => {
+    try {
+      await setTaskPaused(id, true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to pause task');
+    }
+  };
+
+  const handleResume = async (id: number) => {
+    try {
+      await setTaskPaused(id, false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to resume task');
     }
   };
 
@@ -123,6 +139,9 @@ function App() {
               tasks={tasks}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              onPause={handlePause}
+              onResume={handleResume}
+              onLoadLog={getTaskExecutionLog}
             />
           )}
         </main>

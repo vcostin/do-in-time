@@ -26,59 +26,24 @@ impl TaskExecutor {
     pub async fn execute(&self, mut task: Task, action: ExecutionAction) -> Result<()> {
         let task_id = task.id.expect("Task must have an ID");
 
-        // Defense-in-depth: validate inputs again right before any system interaction.
-        if let Some(ref url) = task.url {
-            validate_url(url)?;
-        }
-        if let Some(ref profile) = task.browser_profile {
-            validate_browser_profile(profile)?;
+        if task.status == TaskStatus::Disabled {
+            return Ok(());
         }
 
-        // Execute the browser action
-        let result = match action {
-            ExecutionAction::Open => self
-                .browser_launcher
-                .open_browser(
-                    &task.browser,
-                    task.url.as_deref(),
-                    task.browser_profile.as_deref(),
-                )
-                .await
-                .map(|_| ()),
-            ExecutionAction::Close => {
-                if let Some(url) = &task.url {
-                    self.browser_launcher
-                        .close_browser_by_url(&task.browser, url, task.allow_close_all)
-                        .await
-                } else {
-                    if task.allow_close_all {
-                        self.browser_launcher.close_browser(&task.browser).await
-                    } else {
-                        Err(crate::error::AppError::InvalidTask(
-                            "Close without URL is blocked unless 'allow_close_all' is enabled for this task"
-                                .to_string(),
-                        ))
-                    }
-                }
-            }
-        };
+        let result = self.run_action(&task, &action).await;
 
-        // Update task record based on execution result
         match result {
-            Ok(_) => {
-                // Increment execution count for open actions
+            Ok(()) => {
                 if action == ExecutionAction::Open {
                     task.execution_count += 1;
                 }
 
-                // Handle repeat logic
+                task.clear_last_error();
+
                 if let Some(repeat_config) = &task.repeat_config {
                     match action {
                         ExecutionAction::Open => {
-                            // Advance from the occurrence that just ran (not original start_time).
-                            let base = task
-                                .next_open_execution
-                                .unwrap_or(task.start_time);
+                            let base = task.next_open_execution.unwrap_or(task.start_time);
                             let next = next_future_occurrence(&task, base, Utc::now())?;
 
                             let should_continue =
@@ -103,7 +68,6 @@ impl TaskExecutor {
                         }
                     }
                 } else {
-                    // One-time task
                     match action {
                         ExecutionAction::Open => {
                             task.next_open_execution = None;
@@ -118,20 +82,67 @@ impl TaskExecutor {
                     }
                 }
 
-                self.db.update_task(task_id, task.clone()).await?;
+                let _ = self
+                    .db
+                    .add_execution_log(task_id, &action, true, Some("ok"))
+                    .await;
+                self.db.save_task_runtime(&task).await?;
                 let _ = self.app_handle.emit("task-updated", task_id);
-
-                // Send notification if enabled
-                self.send_notification_if_enabled(&task, &action).await;
+                self.send_notification_if_enabled(&task, &action, None)
+                    .await;
 
                 Ok(())
             }
             Err(e) => {
+                let message = e.to_string();
                 task.status = TaskStatus::Failed;
-                self.db.update_task(task_id, task).await?;
+                task.set_last_error(&message);
+
+                let _ = self
+                    .db
+                    .add_execution_log(task_id, &action, false, Some(&message))
+                    .await;
+                let _ = self.db.save_task_runtime(&task).await;
                 let _ = self.app_handle.emit("task-updated", task_id);
+                self.send_notification_if_enabled(&task, &action, Some(&message))
+                    .await;
 
                 Err(e)
+            }
+        }
+    }
+
+    async fn run_action(&self, task: &Task, action: &ExecutionAction) -> Result<()> {
+        if let Some(ref url) = task.url {
+            validate_url(url)?;
+        }
+        if let Some(ref profile) = task.browser_profile {
+            validate_browser_profile(profile)?;
+        }
+
+        match action {
+            ExecutionAction::Open => self
+                .browser_launcher
+                .open_browser(
+                    &task.browser,
+                    task.url.as_deref(),
+                    task.browser_profile.as_deref(),
+                )
+                .await
+                .map(|_| ()),
+            ExecutionAction::Close => {
+                if let Some(url) = &task.url {
+                    self.browser_launcher
+                        .close_browser_by_url(&task.browser, url, task.allow_close_all)
+                        .await
+                } else if task.allow_close_all {
+                    self.browser_launcher.close_browser(&task.browser).await
+                } else {
+                    Err(crate::error::AppError::InvalidTask(
+                        "Close without URL is blocked unless 'allow_close_all' is enabled for this task"
+                            .to_string(),
+                    ))
+                }
             }
         }
     }
@@ -149,37 +160,45 @@ impl TaskExecutor {
         }
     }
 
-    async fn send_notification_if_enabled(&self, task: &Task, action: &ExecutionAction) {
-        // Get settings from database
+    async fn send_notification_if_enabled(
+        &self,
+        task: &Task,
+        action: &ExecutionAction,
+        error: Option<&str>,
+    ) {
         let settings = match self.db.get_settings().await {
             Ok(s) => s,
-            Err(_) => return, // Silently fail if we can't get settings
+            Err(_) => return,
         };
 
-        // Only send notification if enabled
         if !settings.show_notifications {
             return;
         }
 
-        // Build notification message
-        let action_text = match action {
-            ExecutionAction::Open => "opened",
-            ExecutionAction::Close => "closed",
-        };
-
-        let message = if let Some(ref url) = task.url {
-            format!("{} {} in {}", action_text, url, task.browser)
+        let (title, body) = if let Some(err) = error {
+            (
+                format!("Task failed: {}", task.name),
+                format!("{} — {}", action, err),
+            )
         } else {
-            format!("{} {}", action_text, task.browser)
+            let action_text = match action {
+                ExecutionAction::Open => "opened",
+                ExecutionAction::Close => "closed",
+            };
+            let message = if let Some(ref url) = task.url {
+                format!("{} {} in {}", action_text, url, task.browser)
+            } else {
+                format!("{} {}", action_text, task.browser)
+            };
+            (format!("Task: {}", task.name), message)
         };
 
-        // Send notification using tauri-plugin-notification
         let _ = self
             .app_handle
             .notification()
             .builder()
-            .title(format!("Task: {}", task.name))
-            .body(message)
+            .title(title)
+            .body(body)
             .show();
     }
 }

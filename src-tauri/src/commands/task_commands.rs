@@ -1,4 +1,4 @@
-use crate::db::{Database, Task};
+use crate::db::{Database, Task, TaskExecutionLogEntry};
 use std::sync::Arc;
 use tauri::State;
 
@@ -29,4 +29,26 @@ pub async fn update_task(
 #[tauri::command]
 pub async fn delete_task(id: i64, db: State<'_, Arc<Database>>) -> Result<(), String> {
     db.delete_task(id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_task_paused(
+    id: i64,
+    paused: bool,
+    db: State<'_, Arc<Database>>,
+) -> Result<Task, String> {
+    db.set_task_paused(id, paused)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_task_execution_log(
+    id: i64,
+    limit: Option<i64>,
+    db: State<'_, Arc<Database>>,
+) -> Result<Vec<TaskExecutionLogEntry>, String> {
+    db.get_task_execution_log(id, limit.unwrap_or(20))
+        .await
+        .map_err(|e| e.to_string())
 }

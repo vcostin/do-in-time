@@ -191,6 +191,8 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         status: initialTask?.status || TaskStatus.Active,
         next_open_execution: initialTask?.next_open_execution,
         next_close_execution: initialTask?.next_close_execution,
+        last_error: initialTask?.last_error ?? null,
+        last_execution_at: initialTask?.last_execution_at ?? null,
       };
 
       await onSubmit(task);

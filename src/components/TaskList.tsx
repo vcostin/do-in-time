@@ -1,13 +1,23 @@
-import { Task } from '../types/task';
+import { Task, TaskExecutionLogEntry } from '../types/task';
 import { TaskItem } from './TaskItem';
 
 interface TaskListProps {
   tasks: Task[];
   onEdit: (task: Task) => void;
   onDelete: (id: number) => void;
+  onPause: (id: number) => void;
+  onResume: (id: number) => void;
+  onLoadLog: (id: number) => Promise<TaskExecutionLogEntry[]>;
 }
 
-export function TaskList({ tasks, onEdit, onDelete }: TaskListProps) {
+export function TaskList({
+  tasks,
+  onEdit,
+  onDelete,
+  onPause,
+  onResume,
+  onLoadLog,
+}: TaskListProps) {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow">
@@ -26,6 +36,9 @@ export function TaskList({ tasks, onEdit, onDelete }: TaskListProps) {
           task={task}
           onEdit={onEdit}
           onDelete={onDelete}
+          onPause={onPause}
+          onResume={onResume}
+          onLoadLog={onLoadLog}
         />
       ))}
     </div>

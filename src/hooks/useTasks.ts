@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Task } from '../types/task';
+import { Task, TaskExecutionLogEntry } from '../types/task';
 import { TauriTaskService } from '../services/tauri-api';
 import { listen } from '@tauri-apps/api/event';
 
@@ -53,20 +53,35 @@ export function useTasks() {
     }
   }, []);
 
-  // Initial load
+  const setTaskPaused = useCallback(async (id: number, paused: boolean): Promise<Task> => {
+    try {
+      const updated = await TauriTaskService.setTaskPaused(id, paused);
+      setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      return updated;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update task status';
+      throw new Error(message);
+    }
+  }, []);
+
+  const getTaskExecutionLog = useCallback(
+    async (id: number, limit = 20): Promise<TaskExecutionLogEntry[]> => {
+      return TauriTaskService.getTaskExecutionLog(id, limit);
+    },
+    [],
+  );
+
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
 
-  // Listen for task-updated events from backend
   useEffect(() => {
     const unlisten = listen<number>('task-updated', () => {
-      // Refresh all tasks when any task is updated by the scheduler
       loadTasks();
     });
 
     return () => {
-      unlisten.then(fn => fn());
+      unlisten.then((fn) => fn());
     };
   }, [loadTasks]);
 
@@ -77,6 +92,8 @@ export function useTasks() {
     createTask,
     updateTask,
     deleteTask,
+    setTaskPaused,
+    getTaskExecutionLog,
     refreshTasks: loadTasks,
   };
 }

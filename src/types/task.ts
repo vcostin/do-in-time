@@ -24,6 +24,7 @@ export enum TaskStatus {
   Active = 'active',
   Completed = 'completed',
   Failed = 'failed',
+  Disabled = 'disabled',
 }
 
 export enum RepeatInterval {
@@ -53,6 +54,17 @@ export interface Task {
   status: TaskStatus;
   next_open_execution?: string | null;
   next_close_execution?: string | null;
+  last_error?: string | null;
+  last_execution_at?: string | null;
+}
+
+export interface TaskExecutionLogEntry {
+  id: number;
+  task_id: number;
+  action: string;
+  success: boolean;
+  message?: string | null;
+  created_at: string;
 }
 
 export interface SchedulerStatus {

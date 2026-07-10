@@ -1,5 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
-import { Task, SchedulerStatus, AppSettings } from '../types/task';
+import {
+  Task,
+  SchedulerStatus,
+  AppSettings,
+  TaskExecutionLogEntry,
+} from '../types/task';
 
 export class TauriTaskService {
   static async getAllTasks(): Promise<Task[]> {
@@ -20,6 +25,17 @@ export class TauriTaskService {
 
   static async deleteTask(id: number): Promise<void> {
     return invoke<void>('delete_task', { id });
+  }
+
+  static async setTaskPaused(id: number, paused: boolean): Promise<Task> {
+    return invoke<Task>('set_task_paused', { id, paused });
+  }
+
+  static async getTaskExecutionLog(
+    id: number,
+    limit = 20,
+  ): Promise<TaskExecutionLogEntry[]> {
+    return invoke<TaskExecutionLogEntry[]>('get_task_execution_log', { id, limit });
   }
 
   static async startScheduler(): Promise<void> {
