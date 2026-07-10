@@ -342,7 +342,7 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Allow close all browser instances (dangerous)
           </span>
-          <InfoTooltip text="When enabled, a Close action with no URL will terminate all instances of the selected browser. Leave this disabled unless you explicitly need that behavior." />
+          <InfoTooltip text="On Windows/Linux, URL close matches window titles containing the site host. If no window matches, enabling this falls back to terminating all instances of the selected browser. Also required to close when the task has no URL." />
         </label>
       </div>
 

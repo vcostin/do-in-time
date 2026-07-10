@@ -137,6 +137,11 @@ deno task dev
 
 5. **Click "Create Task"** to save
 
+### Closing browsers
+
+- **macOS**: closes tabs whose URL contains the scheduled URL (AppleScript).
+- **Windows / Linux**: closes windows whose title contains the URL host (best-effort). If nothing matches, enable **Allow close all browser instances** to terminate that browser’s processes as a fallback. Without a URL, close always requires that option.
+
 ### Managing Tasks
 
 - **Edit**: Click the "Edit" button on any task

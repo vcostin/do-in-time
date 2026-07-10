@@ -48,7 +48,7 @@ impl TaskExecutor {
             ExecutionAction::Close => {
                 if let Some(url) = &task.url {
                     self.browser_launcher
-                        .close_browser_by_url(&task.browser, url)
+                        .close_browser_by_url(&task.browser, url, task.allow_close_all)
                         .await
                 } else {
                     if task.allow_close_all {

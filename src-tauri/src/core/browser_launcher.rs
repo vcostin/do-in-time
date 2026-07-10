@@ -5,6 +5,49 @@ use crate::utils::validation::escape_applescript_string;
 use crate::utils::validation::validate_browser_profile;
 use std::process::{Child, Command};
 
+/// Extract a safe host substring used to match window titles for URL-based close.
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
+fn url_close_needle(url: &str) -> Result<String> {
+    let trimmed = url.trim();
+    let without_scheme = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"))
+        .or_else(|| trimmed.strip_prefix("HTTPS://"))
+        .or_else(|| trimmed.strip_prefix("HTTP://"))
+        .ok_or_else(|| {
+            AppError::InvalidTask("URL must start with http:// or https://".to_string())
+        })?;
+
+    let authority = without_scheme
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .split('?')
+        .next()
+        .unwrap_or("");
+
+    // Drop userinfo if present: user:pass@host
+    let host_port = authority
+        .rsplit('@')
+        .next()
+        .unwrap_or(authority);
+
+    let host = host_port.split(':').next().unwrap_or(host_port).to_lowercase();
+
+    if host.is_empty()
+        || !host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return Err(AppError::InvalidTask(format!(
+            "Could not extract a safe host from URL: {}",
+            url
+        )));
+    }
+
+    Ok(host)
+}
+
 pub struct BrowserLauncher;
 
 impl BrowserLauncher {
@@ -135,45 +178,23 @@ impl BrowserLauncher {
         }
     }
 
-    /// Close browser tabs/windows that match the given URL
+    /// Close browser tabs/windows that match the given URL.
     ///
-    /// Platform-specific implementations:
-    /// - macOS: Uses AppleScript to close tabs matching URL (automatic)
-    /// - Windows: Manual close required (no native tab-level control available)
-    /// - Linux: Closes all browser instances (fallback)
-    ///
-    /// ## Windows Limitation
-    ///
-    /// Unlike macOS which has AppleScript for scriptable browser control, Windows does not
-    /// provide a native, straightforward mechanism to close specific browser tabs programmatically.
-    ///
-    /// Why native solutions don't work on Windows:
-    /// - **PowerShell cmdlet approach**: Process command lines don't contain tab URLs in Chromium browsers
-    /// - **UI Automation API**: Complex to implement, unreliable for dynamic web content
-    /// - **Window title matching**: Fragile, titles change frequently and aren't unique
-    ///
-    /// Alternative solutions (not implemented due to complexity):
-    /// - **Chrome DevTools Protocol (CDP)**: Requires browser to run with `--remote-debugging-port` flag
-    /// - **Browser extensions**: Requires pre-installation and browser-specific implementations
-    /// - **Native messaging**: Requires separate browser extension for each browser
-    ///
-    /// For now, Windows users must manually close tabs after they're opened by the scheduler.
-    pub async fn close_browser_by_url(&self, browser: &BrowserType, url: &str) -> Result<()> {
-        #[cfg(target_os = "windows")]
-        {
-            // Windows: Manual close required
-            // See function documentation above for detailed explanation of Windows limitations
-            println!(
-                "⚠ Windows: Please manually close the {} tab with URL: {}",
-                browser, url
-            );
-            println!("Automatic tab closing is not available on Windows without additional setup.");
-            Ok(())
-        }
-
+    /// Platform behavior:
+    /// - **macOS**: AppleScript closes tabs whose URL contains the target
+    /// - **Windows / Linux**: close windows whose title contains the URL host;
+    ///   if none match and `allow_close_all` is set, terminate all processes
+    ///   for that browser. Never kills every browser instance for a URL close
+    ///   unless that fallback is explicitly allowed.
+    pub async fn close_browser_by_url(
+        &self,
+        browser: &BrowserType,
+        url: &str,
+        allow_close_all: bool,
+    ) -> Result<()> {
         #[cfg(target_os = "macos")]
         {
-            // Use AppleScript like the original Deno implementation
+            let _ = allow_close_all;
             let app_name = match browser {
                 BrowserType::Chrome => "Google Chrome",
                 BrowserType::Edge => "Microsoft Edge",
@@ -185,7 +206,6 @@ impl BrowserLauncher {
                 BrowserType::LibreWolf => "LibreWolf",
             };
 
-            // Sanitize URL to prevent AppleScript injection
             let escaped_url = escape_applescript_string(url);
 
             let script = format!(
@@ -215,16 +235,183 @@ impl BrowserLauncher {
             }
         }
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
-            let _ = url;
-            // Linux: fallback to closing all instances since we don't have easy tab control
-            println!(
-                "Linux: URL-based closing not supported, closing all {} instances",
-                browser
-            );
-            self.close_browser(browser).await
+            let needle = url_close_needle(url)?;
+            let closed = self.close_windows_matching_title(browser, &needle)?;
+
+            if closed {
+                println!(
+                    "Closed {} window(s) matching host '{}' from URL {}",
+                    browser, needle, url
+                );
+                return Ok(());
+            }
+
+            if allow_close_all {
+                println!(
+                    "No {} window title matched '{}'; falling back to close-all (allowed)",
+                    browser, needle
+                );
+                return self.close_browser(browser).await;
+            }
+
+            Err(AppError::Scheduler(format!(
+                "Could not find a {} window whose title contains '{}'. \
+                 Enable 'Allow close all browser instances' to terminate all {} processes as a fallback.",
+                browser, needle, browser
+            )))
         }
+    }
+
+    /// Best-effort: close top-level windows whose title contains `needle`.
+    /// Returns true if at least one window was asked to close.
+    #[cfg(target_os = "linux")]
+    fn close_windows_matching_title(&self, browser: &BrowserType, needle: &str) -> Result<bool> {
+        let _ = browser;
+        let needle_lower = needle.to_lowercase();
+
+        if Self::command_exists("wmctrl") {
+            let output = Command::new("wmctrl")
+                .arg("-l")
+                .output()
+                .map_err(|e| AppError::Scheduler(format!("wmctrl -l failed: {}", e)))?;
+
+            if output.status.success() {
+                let listing = String::from_utf8_lossy(&output.stdout);
+                let mut closed_any = false;
+
+                for line in listing.lines() {
+                    let mut parts = line.split_whitespace();
+                    let Some(window_id) = parts.next() else {
+                        continue;
+                    };
+                    // desktop number
+                    let _ = parts.next();
+                    // client machine
+                    let _ = parts.next();
+                    let title = parts.collect::<Vec<_>>().join(" ");
+                    if !title.to_lowercase().contains(&needle_lower) {
+                        continue;
+                    }
+
+                    let status = Command::new("wmctrl")
+                        .args(["-i", "-c", window_id])
+                        .status()
+                        .map_err(|e| {
+                            AppError::Scheduler(format!("wmctrl close failed: {}", e))
+                        })?;
+                    if status.success() {
+                        closed_any = true;
+                    }
+                }
+
+                if closed_any {
+                    return Ok(true);
+                }
+            }
+        }
+
+        if Self::command_exists("xdotool") {
+            let output = Command::new("xdotool")
+                .args(["search", "--name", needle])
+                .output()
+                .map_err(|e| AppError::Scheduler(format!("xdotool search failed: {}", e)))?;
+
+            if output.status.success() {
+                let ids = String::from_utf8_lossy(&output.stdout);
+                let mut closed_any = false;
+                for id in ids.split_whitespace() {
+                    let status = Command::new("xdotool")
+                        .args(["windowclose", id])
+                        .status()
+                        .map_err(|e| {
+                            AppError::Scheduler(format!("xdotool windowclose failed: {}", e))
+                        })?;
+                    if status.success() {
+                        closed_any = true;
+                    }
+                }
+                if closed_any {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    #[cfg(target_os = "windows")]
+    fn close_windows_matching_title(&self, browser: &BrowserType, needle: &str) -> Result<bool> {
+        // Get-Process uses the name without .exe
+        let process_name = self
+            .get_process_name(browser)
+            .trim_end_matches(".exe")
+            .to_string();
+
+        // needle/process_name are constrained; still quote safely for PowerShell.
+        let needle_ps = needle.replace('\'', "''");
+        let process_ps = process_name.replace('\'', "''");
+
+        let script = format!(
+            r#"
+$Needle = '{needle}'
+$ProcessName = '{process}'
+$closed = 0
+Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
+  Where-Object {{
+    $_.MainWindowHandle -ne 0 -and
+    $_.MainWindowTitle -and
+    ($_.MainWindowTitle.ToLower().Contains($Needle.ToLower()))
+  }} |
+  ForEach-Object {{
+    if ($_.CloseMainWindow()) {{ $closed++ }}
+  }}
+Write-Output $closed
+"#,
+            needle = needle_ps,
+            process = process_ps,
+        );
+
+        let output = Command::new(Self::windows_system32_exe(
+            "WindowsPowerShell\\v1.0\\powershell.exe",
+        ))
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
+        .output()
+        .map_err(|e| AppError::Scheduler(format!("PowerShell close failed: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(AppError::Scheduler(format!(
+                "PowerShell window close error: {}",
+                stderr
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let closed: u32 = stdout
+            .lines()
+            .rev()
+            .find_map(|line| line.trim().parse().ok())
+            .unwrap_or(0);
+
+        Ok(closed > 0)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn command_exists(name: &str) -> bool {
+        Command::new("which")
+            .arg(name)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
     }
 
     pub async fn close_browser(&self, browser: &BrowserType) -> Result<()> {
@@ -754,3 +941,30 @@ impl Default for BrowserLauncher {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::url_close_needle;
+
+    #[test]
+    fn extracts_host_from_https_url() {
+        assert_eq!(
+            url_close_needle("https://www.example.com/path?q=1").unwrap(),
+            "www.example.com"
+        );
+    }
+
+    #[test]
+    fn strips_userinfo_and_port() {
+        assert_eq!(
+            url_close_needle("http://user:pass@example.com:8080/x").unwrap(),
+            "example.com"
+        );
+    }
+
+    #[test]
+    fn rejects_unsafe_host_characters() {
+        assert!(url_close_needle("https://exam ple.com/").is_err());
+    }
+}
+
