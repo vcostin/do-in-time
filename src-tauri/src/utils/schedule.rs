@@ -317,4 +317,90 @@ mod tests {
             Some(Utc.with_ymd_and_hms(2026, 1, 8, 11, 0, 0).unwrap())
         );
     }
+
+    #[test]
+    fn removing_repeat_from_past_task_completes() {
+        let start = Utc.with_ymd_and_hms(2020, 1, 1, 9, 0, 0).unwrap();
+        let mut task = daily_task(start);
+        let now = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert!(task.next_open_execution.is_some());
+        assert_eq!(task.status, TaskStatus::Active);
+
+        task.repeat_config = None;
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert!(task.next_open_execution.is_none());
+        assert!(task.next_close_execution.is_none());
+        assert_eq!(task.status, TaskStatus::Completed);
+    }
+
+    #[test]
+    fn past_one_shot_with_future_close_stays_active() {
+        let start = Utc.with_ymd_and_hms(2020, 1, 1, 9, 0, 0).unwrap();
+        let close = Utc.with_ymd_and_hms(2030, 1, 1, 10, 0, 0).unwrap();
+        let mut task = Task {
+            id: Some(1),
+            name: "close-left".into(),
+            browser: BrowserType::Firefox,
+            browser_profile: None,
+            url: None,
+            allow_close_all: false,
+            start_time: start,
+            close_time: Some(close),
+            timezone: "UTC".into(),
+            repeat_config: None,
+            execution_count: 0,
+            status: TaskStatus::Active,
+            next_open_execution: Some(start),
+            next_close_execution: Some(close),
+            last_error: None,
+            last_execution_at: None,
+        };
+        let now = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert!(task.next_open_execution.is_none());
+        assert_eq!(task.next_close_execution, Some(close));
+        assert_eq!(task.status, TaskStatus::Active);
+    }
+
+    #[test]
+    fn adding_repeat_to_past_one_shot_schedules_future_open() {
+        let start = Utc.with_ymd_and_hms(2020, 1, 1, 9, 0, 0).unwrap();
+        let mut task = Task {
+            id: Some(1),
+            name: "revive".into(),
+            browser: BrowserType::Firefox,
+            browser_profile: None,
+            url: None,
+            allow_close_all: false,
+            start_time: start,
+            close_time: Some(start + Duration::hours(2)),
+            timezone: "UTC".into(),
+            repeat_config: None,
+            execution_count: 0,
+            status: TaskStatus::Completed,
+            next_open_execution: None,
+            next_close_execution: None,
+            last_error: None,
+            last_execution_at: None,
+        };
+        let now = Utc.with_ymd_and_hms(2026, 1, 3, 12, 0, 0).unwrap();
+        task.repeat_config = Some(RepeatConfig {
+            interval: RepeatInterval::Daily,
+            end_after: None,
+            end_date: None,
+        });
+        task.status = TaskStatus::Active;
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert_eq!(
+            task.next_open_execution,
+            Some(Utc.with_ymd_and_hms(2026, 1, 4, 9, 0, 0).unwrap())
+        );
+        assert_eq!(
+            task.next_close_execution,
+            Some(Utc.with_ymd_and_hms(2026, 1, 4, 11, 0, 0).unwrap())
+        );
+        assert_eq!(task.status, TaskStatus::Active);
+    }
 }

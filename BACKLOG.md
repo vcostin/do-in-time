@@ -73,6 +73,13 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - `update_task` re-derives `next_*` when `repeat_config` is added, removed, or edited (same path as time edits)
 - Close offset recomputed with the new plan
 
+### Expand automated tests (executor + schedule status)
+
+**Status:** `done`  
+- Executor outcome helpers: soft close miss, hard failure, success schedule / status
+- Schedule status: past one-shots, remove/add repeat, future-close-only stays Active
+- Broader suite (repository integration, frontend) remains optional follow-up
+
 ---
 
 ## Planned
@@ -102,19 +109,6 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 
 **Acceptance:**
 - Long-lived installs do not grow the log unbounded
-
-### Expand automated tests
-
-**Status:** `planned`  
-**Today:** Unit coverage is mostly validation, schedule math (including repeat-edit reschedule helpers), URL close needle, and Linux browser-id parsing. Executor, scheduler, repository, and frontend are largely untested.
-
-**Future:**
-- Repository / migration tests (status transitions, pause/resume, reschedule rules)
-- Executor tests for success, soft close miss, and hard failure paths
-- Lightweight frontend tests for task status controls where practical
-
-**Acceptance:**
-- Regressions in schedule update and pause/retry are caught by `cargo test` (and any added frontend suite)
 
 ### Profile management
 
@@ -237,4 +231,4 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
 - **Close (Win/Linux tab):** remains `on-hold` — no clear resolve yet (CDP / extension / native messaging still undecided). Ship safer scoping and soft close-miss handling when useful; do not promise true tab close until a path is chosen.
-- **Next iteration priority (suggested):** tests → UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. **Nuke DB** is backlog-only, very low priority.
+- **Next iteration priority (suggested):** UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. Optional: repository/frontend tests. **Nuke DB** is backlog-only, very low priority.
