@@ -178,7 +178,7 @@ pub(crate) fn apply_soft_close_miss(task: &mut Task, message: &str) {
     } else if task.status != TaskStatus::Disabled {
         task.status = TaskStatus::Active;
     }
-    task.set_last_error(&format!("Close missed: {message}"));
+    task.set_last_error(format!("Close missed: {message}"));
 }
 
 pub(crate) fn apply_hard_failure(task: &mut Task, message: &str) {
@@ -192,42 +192,8 @@ pub(crate) fn apply_success_schedule(
     action: &ExecutionAction,
     now: DateTime<Utc>,
 ) -> Result<()> {
-    if task.repeat_config.is_some() {
-        match action {
-            ExecutionAction::Open => {
-                // The open that just fired — its close must still run this session.
-                let fired = task.next_open_execution.unwrap_or(task.start_time);
-                let next = next_future_occurrence(task, fired, now)?;
-                let continue_opens = should_schedule_occurrence(task, next);
-
-                task.next_open_execution = if continue_opens { Some(next) } else { None };
-
-                if let Some(close_time) = task.close_time {
-                    let time_diff = close_time.signed_duration_since(task.start_time);
-                    let close_for_fired = fired + time_diff;
-                    task.next_close_execution = if close_for_fired > now {
-                        Some(close_for_fired)
-                    } else {
-                        None
-                    };
-                } else {
-                    task.next_close_execution = None;
-                }
-
-                if task.next_open_execution.is_none() && task.next_close_execution.is_none() {
-                    task.status = TaskStatus::Completed;
-                } else {
-                    task.status = TaskStatus::Active;
-                }
-            }
-            ExecutionAction::Close => {
-                task.next_close_execution = None;
-                if task.next_open_execution.is_none() {
-                    task.status = TaskStatus::Completed;
-                }
-            }
-        }
-    } else {
+    // One-shot: clear the fired slot; no interval advance.
+    if task.repeat_config.is_none() {
         match action {
             ExecutionAction::Open => {
                 task.next_open_execution = None;
@@ -237,6 +203,42 @@ pub(crate) fn apply_success_schedule(
             }
             ExecutionAction::Close => {
                 task.next_close_execution = None;
+                task.status = TaskStatus::Completed;
+            }
+        }
+        return Ok(());
+    }
+
+    match action {
+        ExecutionAction::Open => {
+            // The open that just fired — its close must still run this session.
+            let fired = task.next_open_execution.unwrap_or(task.start_time);
+            let next = next_future_occurrence(task, fired, now)?;
+            let continue_opens = should_schedule_occurrence(task, next);
+
+            task.next_open_execution = if continue_opens { Some(next) } else { None };
+
+            if let Some(close_time) = task.close_time {
+                let time_diff = close_time.signed_duration_since(task.start_time);
+                let close_for_fired = fired + time_diff;
+                task.next_close_execution = if close_for_fired > now {
+                    Some(close_for_fired)
+                } else {
+                    None
+                };
+            } else {
+                task.next_close_execution = None;
+            }
+
+            if task.next_open_execution.is_none() && task.next_close_execution.is_none() {
+                task.status = TaskStatus::Completed;
+            } else {
+                task.status = TaskStatus::Active;
+            }
+        }
+        ExecutionAction::Close => {
+            task.next_close_execution = None;
+            if task.next_open_execution.is_none() {
                 task.status = TaskStatus::Completed;
             }
         }
