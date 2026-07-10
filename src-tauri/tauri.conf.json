@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.roth.do-in-time",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "sh scripts/frontend.sh dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "sh scripts/frontend.sh build",
     "frontendDist": "../dist"
   },
   "app": {

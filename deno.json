@@ -1,0 +1,16 @@
+{
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "check": "deno check src/main.tsx"
+  },
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM", "DOM.Iterable", "deno.ns"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "strict": true
+  }
+}

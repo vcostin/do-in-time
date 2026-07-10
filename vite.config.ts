@@ -1,8 +1,18 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// @ts-expect-error process is a nodejs global
-const host = process.env.TAURI_DEV_HOST;
+type GlobalWithEnv = typeof globalThis & {
+  Deno?: { env: { get(key: string): string | undefined } };
+  process?: { env?: Record<string, string | undefined> };
+};
+
+/** Works under Deno (`Deno.env`) and Node (`process.env`). */
+function getEnv(key: string): string | undefined {
+  const g = globalThis as GlobalWithEnv;
+  return g.Deno?.env.get(key) ?? g.process?.env?.[key];
+}
+
+const host = getEnv("TAURI_DEV_HOST");
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({

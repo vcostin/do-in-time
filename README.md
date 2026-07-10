@@ -37,36 +37,75 @@ A cross-platform desktop application for scheduling browsers to open and close a
 
 ## Installation
 
+**Deno is preferred** for the frontend toolchain: it still fetches packages from
+the npm registry, but **does not run install/lifecycle scripts by default**,
+which avoids the common supply-chain attack vector of auto-executed
+`postinstall` hooks. Node/npm remains supported for cross-compatibility.
+
 ### Prerequisites
 
-- **Node.js** (v18 or later)
-- **Rust** (latest stable version)
-- **npm** or **yarn**
+- **Deno** 2.x (Arch: `pacman -S deno`) *or* **Node.js** 18+
+- **Rust** stable via rustup (Arch: `pacman -S rustup` then `rustup default stable`)
+- **Tauri Linux deps** (Arch):
+
+```bash
+sudo pacman -S --needed \
+  webkit2gtk-4.1 base-devel curl wget file openssl \
+  appmenu-gtk-module libappindicator-gtk3 librsvg
+```
+
+Optional but recommended: install the Tauri CLI with Cargo so you never need the
+npm-based CLI binary:
+
+```bash
+cargo install tauri-cli --version "^2.0.0" --locked
+```
 
 ### Building from Source
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/do-in-time.git
+git clone https://github.com/vcostin/do-in-time.git
 cd do-in-time
 ```
 
-2. Install dependencies:
+2. Install frontend dependencies (pick one):
 ```bash
-npm install
+deno install          # preferred
+# or: npm install
 ```
 
-3. Run in development mode:
+3. Run in development mode (pick one):
 ```bash
-npm run tauri dev
+# Preferred if cargo-tauri is installed
+cargo tauri dev
+
+# Or via package-manager task runners
+deno task tauri dev
+# or: npm run tauri dev
 ```
+
+`tauri.conf.json` starts Vite through `scripts/frontend.sh`, which prefers Deno
+and falls back to npm automatically.
 
 4. Build for production:
 ```bash
-npm run tauri build
+cargo tauri build
+# or: deno task tauri build
+# or: npm run tauri build
 ```
 
 The built application will be in `src-tauri/target/release/`.
+
+### Frontend-only (Vite)
+
+Useful for UI work without launching the native shell:
+
+```bash
+deno task dev
+# or: npm run dev
+# or: sh scripts/frontend.sh dev
+```
 
 ## Usage
 
@@ -121,8 +160,8 @@ The scheduler starts automatically on application launch. You can:
 - **Chrono**: Date/time handling with timezone support
 
 ### Frontend (TypeScript/React)
-- **React 18**: Modern UI library
-- **TypeScript**: Type-safe development
+- **React 19**: Modern UI library
+- **TypeScript**: Type-safe development (Deno toolchain)
 - **Tailwind CSS**: Utility-first styling
 - **Vite**: Fast build tool and dev server
 - **Chrono-node**: Natural language date parsing
@@ -194,15 +233,12 @@ do-in-time/
 # Rust backend tests
 cd src-tauri
 cargo test
-
-# Frontend tests (if configured)
-npm test
 ```
 
 ### Code Style
 
 - **Rust**: Uses `rustfmt` and `clippy`
-- **TypeScript**: ESLint and Prettier configured
+- **TypeScript**: Deno check (`deno task check`) and the existing `tsconfig.json`
 
 ## Troubleshooting
 
