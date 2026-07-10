@@ -7,15 +7,16 @@ A cross-platform desktop application for scheduling browsers to open and close a
 ## Features
 
 ### 🌐 Multi-Browser Support
-- **Automatic Detection**: Detects installed browsers (Chrome, Firefox, Edge, Safari, Brave, Opera)
-- **Profile Management**: Support for browser profiles (Chrome profiles, Firefox profiles)
+- **Automatic Detection**: Detects installed browsers (Chrome, Firefox, Edge, Safari, Brave, Opera, Chromium, LibreWolf)
 - **Default Browser**: Automatically selects your system's default browser
+- **Profiles (basic)**: Optional free-text profile name/directory for launch; full profile management is [planned](BACKLOG.md)
 
 ### ⏰ Flexible Scheduling
 - **Natural Language Input**: Enter schedules like "January 31st from 9am to 11am ET"
 - **Precise Timing**: Set exact start and close times for browser sessions
 - **Timezone Support**: Full timezone handling with UTC storage and local display
 - **Repeating Tasks**: Daily, weekly, or monthly recurring schedules
+- **Close behavior**: Reliable tab close on macOS; Windows/Linux are best-effort (window title / optional close-all). True cross-platform tab close is [on hold](BACKLOG.md)
 
 ### 🔒 Security Features
 - **Input Validation**: Server-side validation prevents malicious URLs and path traversal
@@ -25,15 +26,16 @@ A cross-platform desktop application for scheduling browsers to open and close a
 
 ### 🎯 Smart Task Management
 - **Real-time Updates**: Event-based UI updates for instant status changes
-- **Task History**: Track execution history with success/failure logs
 - **Automatic Scheduling**: Background scheduler runs automatically on startup
-- **Task Status**: Monitor tasks (Active, Completed, Failed, Disabled)
+- **Task Status**: Monitor tasks (Active, Completed, Failed)
 
-###🎨 Modern UI
-- **Dark Mode Support**: Automatic dark/light theme switching
+### 🎨 Modern UI
 - **Responsive Design**: Clean, intuitive interface built with React and Tailwind CSS
 - **Quick Time Entry**: Natural language date parsing for faster task creation
 - **Visual Feedback**: Color-coded status indicators and tooltips
+- **Dark mode**: [Planned](BACKLOG.md) — styles exist; theme switching not wired yet
+
+See [BACKLOG.md](BACKLOG.md) for deferred work (profile management, dark mode, major close improvements).
 
 ## Installation
 
@@ -147,7 +149,6 @@ deno task dev
 - **Edit**: Click the "Edit" button on any task
 - **Delete**: Click "Delete" to remove a task
 - **Status**: Tasks show real-time status (Active, Completed, Failed)
-- **History**: View execution history for each task
 
 ### Scheduler Control
 
@@ -255,7 +256,7 @@ cargo test
 - Verify the scheduler is running (green indicator)
 - Check task status - it should be "Active"
 - Ensure the scheduled time is in the future
-- Check execution history for error messages
+- Check application logs / notifications for error messages
 
 ### Database Issues
 If you encounter database errors:
