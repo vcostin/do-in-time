@@ -163,6 +163,62 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Dark theme is reachable without manual DOM hacks
 - Preference survives app restart
 
+### Compact task card UI
+
+**Status:** `planned`  
+**Today:** Task cards show full dual-timezone lines, schedule TZ, last run, errors, and a tall action column — readable but spacious, especially with many tasks.
+
+**Future:**
+- Denser card layout (tighter spacing, secondary times/meta less prominent)
+- Keep local + schedule-zone times and last-error/log access without losing scannability
+- Optionally collapse secondary details until expanded
+
+**Acceptance:**
+- More tasks fit on screen without scrolling as much
+- Dual-timezone clarity and Log / Activity access remain obvious
+
+### 12 / 24-hour time format setting
+
+**Status:** `planned`  
+**Today:** Times use locale-default formatting (often 12-hour via `date-fns` `PPp` / `toLocaleString`) with no user override.
+
+**Future:**
+- Settings toggle: 12-hour vs 24-hour clock
+- Persist in `settings` and apply across task cards, Activity, forms/tooltips where times are shown
+- Keep schedule-zone dual display consistent with the chosen format
+
+**Acceptance:**
+- Choosing 24-hour shows times like `15:30` everywhere the preference applies
+- Preference survives app restart
+
+### Calendar schedule view
+
+**Status:** `planned`  
+**Today:** Schedules are only a vertical task list; no calendar overview of upcoming opens/closes.
+
+**Future:**
+- Calendar (day/week/month) showing scheduled open/close events
+- Distinct colors per task (or per action: open vs close) so overlapping sessions are scannable
+- Click through to the task / edit flow
+
+**Acceptance:**
+- User can see multiple tasks’ next runs on a calendar without reading every card
+- Color coding remains readable in light theme (and dark when that ships)
+
+### React router (leave modals behind)
+
+**Status:** `planned`  
+**Today:** Almost everything lives on one screen; Settings and Activity are modals. As features grow (calendar, profiles, denser editing), modals will not scale.
+
+**Future:**
+- Add a React router (e.g. React Router) with real routes: tasks list, task create/edit, activity, settings, calendar
+- Prefer full pages / nested layouts over stacking modals
+- Keep deep-linkable paths where useful inside the desktop shell
+
+**Acceptance:**
+- Primary flows (create/edit, activity, settings, calendar) are navigable routes, not only overlays
+- Back/forward or in-app nav works without losing task list context awkwardly
+
 ### Docs / capabilities polish
 
 **Status:** `planned`  
@@ -182,4 +238,5 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
-- **Next iteration priority (suggested):** harden close scoping → soft close failures + zombie/reschedule fixes → tests. Profile management / dark mode are polish. Full tab close remains on-hold.
+- **Close (Win/Linux tab):** remains `on-hold` — no clear resolve yet (CDP / extension / native messaging still undecided). Ship safer scoping and soft close-miss handling when useful; do not promise true tab close until a path is chosen.
+- **Next iteration priority (suggested):** soft close failures + zombie/reschedule fixes → tests → UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish.
