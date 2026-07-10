@@ -86,7 +86,6 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
     browser: '' as BrowserType | '',
     url: '',
     allowCloseAll: false,
-    browserProfile: '',
     startTime: '',
     closeTime: '',
     timezone: getSystemTimeZone(),
@@ -148,7 +147,6 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         browser: initialTask.browser,
         url: initialTask.url || '',
         allowCloseAll: initialTask.allow_close_all || false,
-        browserProfile: initialTask.browser_profile || '',
         startTime: initialTask.start_time
           ? utcToZonedDatetimeString(initialTask.start_time, tz)
           : '',
@@ -245,7 +243,8 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
         browser: formData.browser,
         url: formData.url || null,
         allow_close_all: formData.allowCloseAll,
-        browser_profile: formData.browserProfile || null,
+        // Profile picker is deferred (BACKLOG); preserve any existing value on edit.
+        browser_profile: initialTask?.browser_profile ?? null,
         start_time: zonedDatetimeStringToUtc(formData.startTime, tz),
         close_time: formData.closeTime ? zonedDatetimeStringToUtc(formData.closeTime, tz) : null,
         timezone: tz,
@@ -343,20 +342,6 @@ export function TaskForm({ initialTask, onSubmit, onCancel }: TaskFormProps) {
           onChange={(e) => setFormData({ ...formData, url: e.target.value })}
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           placeholder="https://example.com"
-        />
-      </div>
-
-      <div>
-        <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Browser Profile (optional)
-          <InfoTooltip text="For Chrome/Edge: use 'Default', 'Profile 1', 'Profile 2', etc. For Firefox: enter the profile name. Leave empty to use the default profile." />
-        </label>
-        <input
-          type="text"
-          value={formData.browserProfile}
-          onChange={(e) => setFormData({ ...formData, browserProfile: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-          placeholder="e.g., Profile 1"
         />
       </div>
 

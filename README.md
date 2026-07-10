@@ -9,7 +9,6 @@ A cross-platform desktop application for scheduling browsers to open and close a
 ### 🌐 Multi-Browser Support
 - **Automatic Detection**: Detects installed browsers (Chrome, Firefox, Edge, Safari, Brave, Opera, Chromium, LibreWolf)
 - **Default Browser**: Automatically selects your system's default browser
-- **Profiles (basic)**: Optional free-text profile name/directory for launch; full profile management is [planned](BACKLOG.md)
 
 ### ⏰ Flexible Scheduling
 - **Natural Language Input**: Enter schedules like "January 31st from 9am to 11am ET" or "tomorrow at 2pm JST"
@@ -123,7 +122,6 @@ deno task dev
    - **Task Name**: Descriptive name (e.g., "Morning News Check")
    - **Browser**: Select from detected browsers
    - **URL**: Website to open (optional)
-   - **Browser Profile**: Specific profile to use (optional)
 
 3. **Set schedule using one of two methods:**
 

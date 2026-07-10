@@ -125,7 +125,7 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 ### Profile management
 
 **Status:** `planned`  
-**Today:** Free-text profile field passed as launch args (Chrome/Edge profile directory, Firefox profile name). No discovery or validation against installed profiles.
+**Today:** Backend still accepts `browser_profile` (launch args + validation), but the task form field is **hidden** so users are not offered an unfinished free-text control. Existing stored profiles are preserved on edit.
 
 **Future:**
 - Enumerate installed Chrome/Chromium/Edge/Firefox/LibreWolf profiles
