@@ -95,6 +95,14 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Browser / repeat / URL on one meta line; start/close + last run + schedule TZ under **More**
 - Per-task **Log** and header **Activity** unchanged
 
+### Calendar schedule view
+
+**Status:** `done`  
+- List | Calendar toggle; Day / Week / Month navigation
+- Expands repeating tasks client-side (same interval/DST rules as the scheduler) into open/close events
+- Per-task colors; open = solid chip, close = dashed; click event → edit task
+- Month cells show task dots and drill into Day
+
 ---
 
 ## Planned
@@ -153,20 +161,6 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Dark theme is reachable without manual DOM hacks
 - Preference survives app restart
 
-### Calendar schedule view
-
-**Status:** `planned`  
-**Today:** Schedules are only a vertical task list; no calendar overview of upcoming opens/closes.
-
-**Future:**
-- Calendar (day/week/month) showing scheduled open/close events
-- Distinct colors per task (or per action: open vs close) so overlapping sessions are scannable
-- Click through to the task / edit flow
-
-**Acceptance:**
-- User can see multiple tasks’ next runs on a calendar without reading every card
-- Color coding remains readable in light theme (and dark when that ships)
-
 ### React router (leave modals behind)
 
 **Status:** `planned`  
@@ -218,4 +212,4 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
 - **Close (Win/Linux tab):** remains `on-hold` — no clear resolve yet (CDP / extension / native messaging still undecided). Ship safer scoping and soft close-miss handling when useful; do not promise true tab close until a path is chosen.
-- **Next iteration priority (suggested):** UI polish (calendar schedule view, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. Optional: repository/frontend tests. **Nuke DB** is backlog-only, very low priority.
+- **Next iteration priority (suggested):** UI polish (React router — move Settings/Activity/edit/calendar off modals toward routes). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. Optional: repository/frontend tests. **Nuke DB** is backlog-only, very low priority.

@@ -4,10 +4,13 @@ import { useTasks } from './hooks/useTasks';
 import { useScheduler } from './hooks/useScheduler';
 import { TaskForm } from './components/TaskForm';
 import { TaskList } from './components/TaskList';
+import { ScheduleCalendar } from './components/ScheduleCalendar';
 import { SchedulerStatus } from './components/SchedulerStatus';
 import { SettingsModal } from './components/SettingsModal';
 import { ActivityModal } from './components/ActivityModal';
 import { Task } from './types/task';
+
+type MainView = 'list' | 'calendar';
 
 function App() {
   const { tasks, loading, error, createTask, updateTask, deleteTask, setTaskPaused, getTaskExecutionLog } = useTasks();
@@ -16,6 +19,7 @@ function App() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
+  const [mainView, setMainView] = useState<MainView>('list');
 
   const handleCreateOrUpdate = async (task: Task) => {
     try {
@@ -78,6 +82,33 @@ function App() {
     };
   }, []);
 
+  const viewToggle = (
+    <div className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
+      <button
+        type="button"
+        onClick={() => setMainView('list')}
+        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+          mainView === 'list'
+            ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+        }`}
+      >
+        List
+      </button>
+      <button
+        type="button"
+        onClick={() => setMainView('calendar')}
+        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+          mainView === 'calendar'
+            ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+        }`}
+      >
+        Calendar
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       <div className="container mx-auto px-4 py-8">
@@ -115,14 +146,17 @@ function App() {
         </header>
 
         <main>
-          {!showForm && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="mb-6 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              + New Task
-            </button>
-          )}
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            {!showForm && (
+              <button
+                onClick={() => setShowForm(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                + New Task
+              </button>
+            )}
+            {!loading && !error && viewToggle}
+          </div>
 
           {showForm && (
             <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
@@ -143,6 +177,8 @@ function App() {
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
               <p className="text-red-800 dark:text-red-200">Error: {error}</p>
             </div>
+          ) : mainView === 'calendar' ? (
+            <ScheduleCalendar tasks={tasks} onEditTask={handleEdit} />
           ) : (
             <TaskList
               tasks={tasks}

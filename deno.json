@@ -6,7 +6,7 @@
     "build": "deno task check && vite build",
     "preview": "vite preview",
     "tauri": "deno run -A npm:@tauri-apps/cli",
-    "test:utils": "deno test -A src/utils/datetime_timezone_test.ts"
+    "test:utils": "deno test -A src/utils/datetime_timezone_test.ts src/utils/scheduleEvents_test.ts"
   },
   "compilerOptions": {
     "lib": ["ES2020", "DOM", "DOM.Iterable", "deno.ns"],
