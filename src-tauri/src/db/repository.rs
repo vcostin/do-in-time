@@ -1,7 +1,7 @@
 use crate::db::connection::Database;
 use crate::db::models::*;
 use crate::error::{AppError, Result};
-use crate::utils::schedule::schedule_next_open_close;
+use crate::utils::schedule::{schedule_inputs_changed, schedule_next_open_close};
 use crate::utils::validation::{validate_browser_profile, validate_url};
 use chrono::Utc;
 use sqlx::Row;
@@ -129,10 +129,7 @@ impl Database {
 
         let old_task = self.get_task(id).await?;
 
-        let times_changed =
-            old_task.start_time != task.start_time || old_task.close_time != task.close_time;
-
-        if times_changed {
+        if schedule_inputs_changed(&old_task, &task) {
             let now = Utc::now();
 
             if task.status == TaskStatus::Completed || task.status == TaskStatus::Failed {

@@ -81,6 +81,16 @@ pub fn next_future_occurrence(
     ))
 }
 
+/// Form fields that drive `next_open_execution` / `next_close_execution`.
+///
+/// Used by `update_task` so editing only the repeat settings still re-derives
+/// the schedule (not only start/close time edits).
+pub fn schedule_inputs_changed(old: &Task, new: &Task) -> bool {
+    old.start_time != new.start_time
+        || old.close_time != new.close_time
+        || old.repeat_config != new.repeat_config
+}
+
 /// Schedule the next open (and matching close) for a repeating task whose
 /// `start_time` may already be in the past.
 ///
@@ -253,5 +263,58 @@ mod tests {
         schedule_next_open_close(&mut task, now).unwrap();
         assert_eq!(task.next_open_execution, Some(start));
         assert_eq!(task.status, TaskStatus::Active);
+    }
+
+    #[test]
+    fn schedule_inputs_changed_detects_repeat_only() {
+        let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
+        let old = daily_task(start);
+        let mut new = daily_task(start);
+        assert!(!schedule_inputs_changed(&old, &new));
+
+        new.repeat_config = Some(RepeatConfig {
+            interval: RepeatInterval::Weekly,
+            end_after: None,
+            end_date: None,
+        });
+        assert!(schedule_inputs_changed(&old, &new));
+    }
+
+    #[test]
+    fn schedule_inputs_changed_detects_repeat_added_or_removed() {
+        let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap();
+        let with_repeat = daily_task(start);
+        let mut one_shot = daily_task(start);
+        one_shot.repeat_config = None;
+
+        assert!(schedule_inputs_changed(&with_repeat, &one_shot));
+        assert!(schedule_inputs_changed(&one_shot, &with_repeat));
+    }
+
+    #[test]
+    fn daily_to_weekly_recomputes_next_open() {
+        let start = Utc.with_ymd_and_hms(2026, 1, 1, 9, 0, 0).unwrap(); // Thursday
+        let mut task = daily_task(start);
+        let now = Utc.with_ymd_and_hms(2026, 1, 3, 12, 0, 0).unwrap(); // Saturday
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert_eq!(
+            task.next_open_execution,
+            Some(Utc.with_ymd_and_hms(2026, 1, 4, 9, 0, 0).unwrap()) // next daily
+        );
+
+        task.repeat_config = Some(RepeatConfig {
+            interval: RepeatInterval::Weekly,
+            end_after: None,
+            end_date: None,
+        });
+        schedule_next_open_close(&mut task, now).unwrap();
+        assert_eq!(
+            task.next_open_execution,
+            Some(Utc.with_ymd_and_hms(2026, 1, 8, 9, 0, 0).unwrap()) // next Thursday
+        );
+        assert_eq!(
+            task.next_close_execution,
+            Some(Utc.with_ymd_and_hms(2026, 1, 8, 11, 0, 0).unwrap())
+        );
     }
 }

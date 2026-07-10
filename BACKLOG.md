@@ -67,6 +67,12 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - `schedule_next_open_close` marks past one-shots with no next open/close as `Completed`
 - `create_task` no longer forces Active over Completed
 
+### Reschedule when repeat config changes
+
+**Status:** `done`  
+- `update_task` re-derives `next_*` when `repeat_config` is added, removed, or edited (same path as time edits)
+- Close offset recomputed with the new plan
+
 ---
 
 ## Planned
@@ -85,18 +91,6 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Close/kill paths do not intentionally target other browsers or unrelated processes
 - Missing tools / unsupported environments surface a clear error, not a silent no-op
 
-### Reschedule when repeat config changes
-
-**Status:** `planned`  
-**Today:** `update_task` only re-derives `next_*` when `start_time` / `close_time` change—not when `repeat_config` is added, removed, or edited.
-
-**Future:**
-- Re-run `schedule_next_open_close` when repeat interval / end conditions change
-- Clear or recompute next close consistently with the new plan
-
-**Acceptance:**
-- Editing only the repeat settings updates upcoming executions without requiring a time edit
-
 ### Execution log retention
 
 **Status:** `planned`  
@@ -112,7 +106,7 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 ### Expand automated tests
 
 **Status:** `planned`  
-**Today:** Unit coverage is mostly validation, schedule math, URL close needle, and Linux browser-id parsing. Executor, scheduler, repository, and frontend are largely untested.
+**Today:** Unit coverage is mostly validation, schedule math (including repeat-edit reschedule helpers), URL close needle, and Linux browser-id parsing. Executor, scheduler, repository, and frontend are largely untested.
 
 **Future:**
 - Repository / migration tests (status transitions, pause/resume, reschedule rules)
@@ -243,4 +237,4 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
 - **Close (Win/Linux tab):** remains `on-hold` — no clear resolve yet (CDP / extension / native messaging still undecided). Ship safer scoping and soft close-miss handling when useful; do not promise true tab close until a path is chosen.
-- **Next iteration priority (suggested):** reschedule-on-repeat-edit → tests → UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. **Nuke DB** is backlog-only, very low priority.
+- **Next iteration priority (suggested):** tests → UI polish (compact cards, 12/24h, calendar, React router). Harden close scoping only where safe without claiming tab control. Profile management / dark mode remain polish. **Nuke DB** is backlog-only, very low priority.

@@ -128,14 +128,14 @@ impl std::str::FromStr for TaskStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RepeatConfig {
     pub interval: RepeatInterval,
     pub end_after: Option<i32>,
     pub end_date: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum RepeatInterval {
     Daily,
