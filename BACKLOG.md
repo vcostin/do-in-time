@@ -21,6 +21,7 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Optional CDP / remote-debugging launch mode for Chromium-family browsers
 - Browser extension + native messaging for tab close by URL
 - Clearer in-app messaging when close cannot target a single tab (esp. Wayland)
+- Persist launch session identity (PID / window / CDP target) so close can target what open started
 
 **Acceptance (when resumed):**
 - Closing a scheduled session does not require killing the entire browser by default
@@ -47,6 +48,97 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 ---
 
 ## Planned
+
+### Harden Linux / Windows close scoping
+
+**Status:** `planned`  
+**Today:** Linux title-close ignores which browser was requested; `pkill -f` uses short names (`chrome`, `firefox`) that can match unrelated processes. Windows `taskkill` is process-image-wide when `allow_close_all` is set.
+
+**Future:**
+- Scope window matching to the task’s browser where possible
+- Prefer exact process-name kills (`pkill -x` / equivalent) over substring cmdline matches
+- Document required tools (`wmctrl` / `xdotool`) and Wayland limitations in-app and in the README
+
+**Acceptance:**
+- Close/kill paths do not intentionally target other browsers or unrelated processes
+- Missing tools / unsupported environments surface a clear error, not a silent no-op
+
+### Softer close-failure handling
+
+**Status:** `planned`  
+**Today:** Any failed open/close marks the task `Failed`, which stops repeating schedules until Retry—even when close is best-effort and expected to miss (no matching title, Wayland, tools missing).
+
+**Future:**
+- Distinguish hard failures (open/launch) from soft close misses
+- Keep repeating tasks active when close cannot find a target; log the miss
+- Surface “close may not work on this platform” before save when relevant
+
+**Acceptance:**
+- A missed close does not strand an otherwise healthy repeating task
+- Users can see why close did nothing without needing Retry to continue opens
+
+### Fix past one-shot “zombie” Active tasks
+
+**Status:** `planned`  
+**Today:** Creating a non-repeating task with `start_time` in the past clears `next_open_execution` but still leaves status `Active`, so the card looks live and never runs.
+
+**Future:**
+- On create/update, mark past one-shots `Completed` (or reject / warn in the form)
+- Optionally offer “run once now” when the scheduled time is already past
+
+**Acceptance:**
+- No Active task exists with neither a next open nor a next close
+
+### Reschedule when repeat config changes
+
+**Status:** `planned`  
+**Today:** `update_task` only re-derives `next_*` when `start_time` / `close_time` change—not when `repeat_config` is added, removed, or edited.
+
+**Future:**
+- Re-run `schedule_next_open_close` when repeat interval / end conditions change
+- Clear or recompute next close consistently with the new plan
+
+**Acceptance:**
+- Editing only the repeat settings updates upcoming executions without requiring a time edit
+
+### Natural-language time / timezone honesty
+
+**Status:** `planned`  
+**Today:** Chrono NL examples in the README imply timezone phrases (e.g. “ET”), but the form always stores the system timezone and silently ignores failed parses.
+
+**Future:**
+- Parse or strip timezone phrases consistently; store what the user meant when possible
+- Show validation feedback when NL input does not resolve
+- Align README examples with actual behavior
+
+**Acceptance:**
+- Failed NL input is visible to the user
+- Docs do not promise timezone handling the form does not implement
+
+### Execution log retention
+
+**Status:** `planned`  
+**Today:** `task_execution_log` is append-only with no prune; UI only reads the latest N rows.
+
+**Future:**
+- Cap rows per task and/or age (e.g. keep last 100, or 30 days)
+- Prune on write or on a periodic maintenance pass
+
+**Acceptance:**
+- Long-lived installs do not grow the log unbounded
+
+### Expand automated tests
+
+**Status:** `planned`  
+**Today:** Unit coverage is mostly validation, schedule math, URL close needle, and Linux browser-id parsing. Executor, scheduler, repository, and frontend are largely untested.
+
+**Future:**
+- Repository / migration tests (status transitions, pause/resume, reschedule rules)
+- Executor tests for success, soft close miss, and hard failure paths
+- Lightweight frontend tests for task status controls where practical
+
+**Acceptance:**
+- Regressions in schedule update and pause/retry are caught by `cargo test` (and any added frontend suite)
 
 ### Profile management
 
@@ -76,10 +168,23 @@ Status legend: `planned` · `on-hold` · `in-progress` · `done`
 - Dark theme is reachable without manual DOM hacks
 - Preference survives app restart
 
+### Docs / capabilities polish
+
+**Status:** `planned`  
+**Today:** Some README wording still reads like a web app (“server-side validation”); Linux close dependencies are under-documented; DB troubleshooting defaults to “delete the DB.”
+
+**Future:**
+- Document Linux close tools and Wayland limits
+- Clarify desktop IPC validation wording
+- Verify notification / autostart plugin permissions in Tauri capabilities so soft-fail paths are intentional, not silent misconfig
+
+**Acceptance:**
+- README troubleshooting matches real failure modes users hit on each OS
+
 ---
 
 ## Notes
 
 - Prefer updating this file when scope or status changes, rather than re-advertising unfinished items as Features in the README.
 - Related analysis: intention-vs-implementation review (local Cursor canvas).
-- **Next iteration priority (suggested):** profile management / dark mode. Close remains on-hold.
+- **Next iteration priority (suggested):** harden close scoping → soft close failures + zombie/reschedule fixes → NL time honesty → tests. Profile management / dark mode are polish. Full tab close remains on-hold.
