@@ -15,11 +15,6 @@ pub fn normalize_timezone(timezone: &str) -> Result<String> {
     })
 }
 
-/// Validates that `timezone` is a known IANA zone name.
-pub fn validate_timezone(timezone: &str) -> Result<()> {
-    normalize_timezone(timezone).map(|_| ())
-}
-
 /// Require close after start, and repeat end_date after start when set.
 pub fn validate_task_times(task: &Task) -> Result<()> {
     if let Some(close) = task.close_time {
@@ -159,10 +154,10 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_timezone_accepts_iana() {
-        assert!(validate_timezone("UTC").is_ok());
-        assert!(validate_timezone("America/New_York").is_ok());
-        assert!(validate_timezone("Asia/Tokyo").is_ok());
+    fn test_normalize_timezone_accepts_iana() {
+        assert!(normalize_timezone("UTC").is_ok());
+        assert!(normalize_timezone("America/New_York").is_ok());
+        assert!(normalize_timezone("Asia/Tokyo").is_ok());
         assert_eq!(
             normalize_timezone("  America/New_York  ").unwrap(),
             "America/New_York"
@@ -170,10 +165,10 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_timezone_rejects_invalid() {
-        assert!(validate_timezone("").is_err());
-        assert!(validate_timezone("Not/A_Zone").is_err());
-        assert!(validate_timezone("InvalidZone").is_err());
+    fn test_normalize_timezone_rejects_invalid() {
+        assert!(normalize_timezone("").is_err());
+        assert!(normalize_timezone("Not/A_Zone").is_err());
+        assert!(normalize_timezone("InvalidZone").is_err());
     }
 
     #[test]
